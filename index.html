@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MoveBound</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap');
+  :root{
+    /* vibrant stylized theme — warm indigo arena, coral vs teal rivalry */
+    --bg-0:#1a1140;          /* deep indigo base */
+    --bg-1:#241756;          /* raised indigo */
+    --grid:#3a2d6e;          /* board tile */
+    --grid-hi:#473688;       /* board tile alt */
+    --ink:#fff4ec;           /* warm white text */
+    --ink-dim:#b6a6d8;       /* muted lavender text */
+    /* sides */
+    --cyan:#1fd6c4;          /* TEAL side (kept var name for minimal churn) */
+    --cyan-deep:#11998e;
+    --amber:#ff6b5e;         /* CORAL side */
+    --amber-deep:#d6453a;
+    --magenta:#ff3d9a;       /* power / alert */
+    --gold:#ffd24a;          /* commander */
+    --green:#5dffa0;         /* valid move */
+    --shield:#a98bff;        /* util accent */
+    /* UNO suit colors — punchy */
+    --uno-red:#ff5252;--uno-yellow:#ffc11e;--uno-green:#2fd968;--uno-blue:#3a9dff;
+    --panel:rgba(36,23,86,.86);--line:rgba(255,255,255,.12);
+    --shadow:0 10px 44px rgba(10,4,30,.55);
+    --font-ui:'Rajdhani','Segoe UI',system-ui,sans-serif;
+    --font-disp:'Orbitron','Rajdhani',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--font-ui);
+    background:radial-gradient(1100px 700px at 18% -8%,#3a1d7a 0%,transparent 55%),
+      radial-gradient(900px 600px at 85% 0%,#7a2d6e 0%,transparent 50%),
+      radial-gradient(1000px 800px at 50% 120%,#1d2e8a 0%,transparent 55%),var(--bg-0);
+    color:var(--ink);overflow:hidden;display:flex;align-items:center;justify-content:center;
+    min-height:100dvh;user-select:none}
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:999;
+    background:repeating-linear-gradient(0deg,rgba(255,255,255,.01) 0 1px,transparent 1px 3px);
+    mix-blend-mode:overlay;opacity:.4}
+  #app{width:100%;max-width:480px;height:100dvh;max-height:920px;display:flex;flex-direction:column;
+    position:relative;overflow:hidden;box-shadow:var(--shadow);
+    background:radial-gradient(900px 600px at 20% 5%,#3d2284 0%,transparent 55%),
+      radial-gradient(700px 500px at 90% 0%,#6b2a78 0%,transparent 50%),
+      linear-gradient(180deg,#2a1a66 0%,#1c1248 100%)}
+
+  /* TOP BAR */
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;gap:8px;
+    background:linear-gradient(180deg,rgba(44,28,104,.95),rgba(36,23,86,.4));border-bottom:1px solid var(--line);z-index:5}
+  .player-tag{display:flex;align-items:center;gap:7px;font-weight:600;font-size:12.5px;letter-spacing:.5px;transition:.3s}
+  .dot{width:10px;height:10px;border-radius:50%;box-shadow:0 0 12px currentColor}
+  .cyan-tag{color:var(--cyan)}.cyan-tag .dot{background:var(--cyan);color:var(--cyan)}
+  .amber-tag{color:var(--amber)}.amber-tag .dot{background:var(--amber);color:var(--amber)}
+  .player-tag.dimmed{opacity:.4}
+  .turn-badge{font-family:var(--font-disp);font-weight:700;font-size:10.5px;letter-spacing:1.5px;padding:5px 11px;
+    border-radius:20px;border:1px solid var(--line);background:rgba(34,224,255,.08);color:var(--ink-dim);
+    text-transform:uppercase;transition:.3s;text-align:center}
+  .turn-badge.cyan-turn{color:var(--cyan);border-color:var(--cyan);box-shadow:0 0 18px rgba(34,224,255,.3);background:rgba(34,224,255,.12)}
+  .turn-badge.amber-turn{color:var(--amber);border-color:var(--amber);box-shadow:0 0 18px rgba(255,157,60,.3);background:rgba(255,157,60,.12)}
+
+  /* BOARD */
+  .board-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:54px 18px 14px;position:relative;min-height:0;gap:12px}
+  /* draw/match piles flanking the board */
+  .side-pile{display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 0 auto;z-index:6}
+  .side-pile.left{margin-right:2px}.side-pile.right{margin-left:2px}
+  /* quit button */
+  .quit-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;
+    border:1.5px solid var(--line);background:rgba(255,77,82,.08);color:var(--uno-red);cursor:pointer;transition:.15s;flex:0 0 auto}
+  .quit-btn:active{transform:scale(.92)}.quit-btn svg{width:18px;height:18px}
+  .overlay.confirm{background:radial-gradient(circle at 50% 40%,rgba(10,8,20,.92),rgba(6,4,12,.98))}
+  /* board stage holds the grid + its perimeter timer ring */
+  .board-stage{position:relative;height:100%;max-height:100%;aspect-ratio:5/10;flex:0 1 auto;display:flex}
+  /* countdown frame hugging the actual 5x10 board — thin, fades green→red */
+  .timer-ring{position:absolute;inset:-5px;width:calc(100% + 10px);height:calc(100% + 10px);pointer-events:none;z-index:6;overflow:visible}
+  .timer-track{fill:none;stroke:rgba(255,255,255,.06);stroke-width:3}
+  .timer-progress{fill:none;stroke:var(--tcol,#3cff7a);stroke-width:3;stroke-linecap:round;
+    stroke-dasharray:1000;stroke-dashoffset:0;filter:drop-shadow(0 0 5px var(--tcol,#3cff7a));
+    transition:stroke-dashoffset .2s linear, stroke .3s, filter .3s}
+  .timer-ring.low .timer-progress{animation:timerPulse .5s infinite}
+  @keyframes timerPulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .timer-ring.hidden{opacity:0;transition:opacity .3s}
+  .board{--cols:5;--rows:10;display:grid;grid-template-columns:repeat(var(--cols),1fr);grid-template-rows:repeat(var(--rows),1fr);
+    gap:3px;aspect-ratio:5/10;height:100%;max-height:100%;padding:8px;border-radius:16px;
+    background:linear-gradient(160deg,#2c1f63,#3a2876);border:2px solid rgba(255,255,255,.1);
+    box-shadow:inset 0 0 50px rgba(10,4,30,.5),0 8px 30px rgba(10,4,30,.4);position:relative;
+    transition:transform .7s cubic-bezier(.65,0,.35,1)}
+  .board.flipped{transform:rotate(180deg)}
+  .board.flipped .unit{transform:rotate(180deg)}
+  .tile{border-radius:7px;position:relative;background:var(--grid);transition:background .15s,box-shadow .15s;
+    display:flex;align-items:center;justify-content:center}
+  .tile.alt{background:var(--grid-hi)}
+  .tile.movable{cursor:pointer;background:rgba(60,255,157,.14);box-shadow:inset 0 0 0 1.5px rgba(60,255,157,.55),0 0 16px rgba(60,255,157,.25)}
+  .tile.attackable{cursor:pointer;background:rgba(255,77,141,.18);box-shadow:inset 0 0 0 1.5px rgba(255,77,141,.7),0 0 18px rgba(255,77,141,.3)}
+  .tile.movable::after{content:"";width:26%;height:26%;border-radius:50%;background:var(--green);opacity:.8;box-shadow:0 0 10px var(--green)}
+  .tile.selected{box-shadow:inset 0 0 0 2px var(--cyan),0 0 20px rgba(34,224,255,.5)}
+  .tile.selectable{cursor:pointer;box-shadow:inset 0 0 0 1.5px rgba(34,224,255,.4)}
+  .unit{width:84%;height:84%;border-radius:11px;display:flex;align-items:center;justify-content:center;position:relative;transition:filter .2s}
+  .unit svg{width:60%;height:60%;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+  .unit.cyan{background:radial-gradient(circle at 35% 30%,rgba(34,224,255,.35),rgba(10,138,168,.15));
+    border:1.5px solid var(--cyan);color:var(--cyan);box-shadow:0 3px 10px rgba(0,0,0,.5),0 0 14px rgba(34,224,255,.25)}
+  .unit.amber{background:radial-gradient(circle at 35% 30%,rgba(255,157,60,.32),rgba(184,94,16,.15));
+    border:1.5px solid var(--amber);color:var(--amber);box-shadow:0 3px 10px rgba(0,0,0,.5),0 0 14px rgba(255,157,60,.22)}
+  .unit.commander{border-width:2px}
+  .unit.cyan.commander,.unit.amber.commander{border-color:var(--gold);color:var(--gold);box-shadow:0 0 18px rgba(255,210,74,.4)}
+  .unit.dying{animation:die .4s forwards}
+  @keyframes die{to{transform:scale(.1) rotate(90deg);opacity:0;filter:blur(4px)}}
+
+  /* CARD REVEAL */
+  .reveal-stage{position:absolute;inset:0;z-index:35;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .2s}
+  .reveal-stage.show{opacity:1}
+  .reveal-stage .backdrop{position:absolute;inset:0;background:rgba(4,8,15,.55);backdrop-filter:blur(2px)}
+  .reveal-card{position:relative;width:128px;height:180px;border-radius:18px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:8px;background:linear-gradient(160deg,#15294a,#0a1626);
+    border:3px solid var(--c);box-shadow:0 0 50px var(--cg),0 20px 60px rgba(0,0,0,.6)}
+  .reveal-card .who{position:absolute;top:-30px;font-family:var(--font-disp);font-weight:700;font-size:12px;
+    letter-spacing:2px;text-transform:uppercase;white-space:nowrap}
+  .reveal-card .corner{position:absolute;font-family:var(--font-disp);font-weight:900;font-size:15px;color:var(--c)}
+  .reveal-card .corner.tl{top:8px;left:11px}.reveal-card .corner.br{bottom:8px;right:11px;transform:rotate(180deg)}
+  .reveal-card .rtype{font-size:10px;letter-spacing:2px;color:var(--ink-dim);text-transform:uppercase;font-weight:700}
+  .reveal-card .ricon{font-size:52px;font-family:var(--font-disp);font-weight:900;line-height:1;color:var(--c)}
+  .reveal-card .rname{font-size:15px;font-weight:700;letter-spacing:.5px}
+  .reveal-card .rdesc{font-size:10px;color:var(--ink-dim);text-align:center;padding:0 12px;line-height:1.3}
+  @keyframes cardIn{0%{transform:translateY(40px) scale(.5) rotateY(90deg);opacity:0}
+    55%{transform:translateY(-6px) scale(1.06) rotateY(0);opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}
+  .reveal-card.animate{animation:cardIn .55s cubic-bezier(.34,1.56,.64,1)}
+
+  /* ===== HAND ZONE (premium) ===== */
+  .hand-zone{background:linear-gradient(0deg,rgba(8,13,24,.99),rgba(8,13,24,.6));border-top:1px solid var(--line);
+    padding:8px 12px 16px;z-index:5}
+  .action-bar{display:flex;gap:8px;padding:2px 4px 6px;align-items:center}
+  .hint{flex:1;font-size:12.5px;color:var(--cyan);font-weight:600;min-height:18px;display:flex;align-items:center;gap:6px}
+  .hint.power{color:var(--magenta)}.hint.idle{color:var(--ink-dim)}.hint.amber{color:var(--amber)}
+  .hint.warn{color:var(--uno-yellow)}
+
+  /* premium felt panel that holds the hand */
+  .table-felt{display:flex;align-items:stretch;gap:10px;padding:12px 14px;border-radius:18px;margin:0 2px;
+    background:radial-gradient(120% 100% at 50% 0%,rgba(34,224,255,.05),transparent 60%),linear-gradient(180deg,#0e1b30,#0a1322);
+    border:1px solid rgba(34,224,255,.14);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.04),inset 0 0 30px rgba(0,0,0,.5),0 6px 20px rgba(0,0,0,.4)}
+  .deck-col{display:flex;flex-direction:column;align-items:center;gap:7px;flex:0 0 auto;justify-content:center}
+  .pile{width:46px;height:66px;border-radius:10px;position:relative;cursor:pointer;transition:transform .12s}
+  .pile:active{transform:scale(.95)}
+  .pile-label{font-size:8px;letter-spacing:1px;color:var(--ink-dim);text-transform:uppercase;font-weight:700;text-align:center}
+  /* face-down draw stack */
+  .draw-stack{background:repeating-linear-gradient(135deg,#15294a 0 6px,#102038 6px 12px);
+    border:2px solid rgba(34,224,255,.5);box-shadow:0 4px 0 #0a1424,0 6px 0 #0d1a30,0 8px 14px rgba(0,0,0,.5);
+    display:flex;align-items:center;justify-content:center}
+  .draw-stack .logo{width:30px;height:30px;border-radius:50%;border:2px solid var(--cyan);
+    display:flex;align-items:center;justify-content:center;color:var(--cyan);font-family:var(--font-disp);
+    font-weight:900;font-size:13px;background:rgba(34,224,255,.1);transform:rotate(-12deg)}
+  .draw-stack .count{position:absolute;bottom:-7px;right:-6px;background:var(--cyan);color:#05121b;
+    font-family:var(--font-disp);font-weight:900;font-size:10px;border-radius:10px;padding:1px 6px;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+  .draw-stack.pulse{animation:drawPulse 1.2s infinite}
+  /* face-down reveal (opponent's hidden card) */
+  .reveal-card.facedown{border-color:var(--cyan);box-shadow:0 0 40px rgba(34,224,255,.35),0 20px 60px rgba(0,0,0,.6);
+    background:repeating-linear-gradient(135deg,#15294a 0 9px,#102038 9px 18px)}
+  .reveal-card.facedown .fd-logo{width:54px;height:54px;border-radius:50%;border:3px solid var(--cyan);color:var(--cyan);
+    display:flex;align-items:center;justify-content:center;font-family:var(--font-disp);font-weight:900;font-size:28px;
+    background:rgba(34,224,255,.12);transform:rotate(-12deg)}
+  .reveal-card.facedown .fd-tag{font-size:11px;color:var(--ink-dim);letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-top:8px}
+  @keyframes drawPulse{0%,100%{box-shadow:0 4px 0 #0a1424,0 6px 0 #0d1a30,0 8px 14px rgba(0,0,0,.5),0 0 0 0 rgba(34,224,255,.4)}
+    50%{box-shadow:0 4px 0 #0a1424,0 6px 0 #0d1a30,0 8px 22px rgba(34,224,255,.5),0 0 0 4px rgba(34,224,255,.12)}}
+  /* face-up discard / "top card to match" */
+  .discard{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;
+    border:2px solid var(--dc,var(--line));background:linear-gradient(160deg,#13243f,#0b1626);
+    box-shadow:0 0 18px var(--dcg,transparent),0 4px 10px rgba(0,0,0,.4)}
+  .discard .dval{font-family:var(--font-disp);font-weight:900;font-size:26px;line-height:1;color:var(--dc,var(--ink))}
+  .discard .dsmall{font-size:7px;letter-spacing:1px;color:var(--ink-dim);text-transform:uppercase;font-weight:700}
+  .discard.empty{border-style:dashed;opacity:.5}
+  .felt-divider{width:1px;background:linear-gradient(180deg,transparent,rgba(34,224,255,.18),transparent);flex:0 0 auto}
+
+  /* HAND — bigger cards */
+  .hand-side{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+  .hand-meta{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--ink-dim);letter-spacing:1px;font-weight:600;padding:0 2px}
+  .hand{display:flex;gap:7px;overflow-x:auto;padding:4px 2px 6px;scrollbar-width:none;flex:1;align-items:center}
+  .hand::-webkit-scrollbar{display:none}
+  .card{flex:0 0 auto;width:74px;height:104px;border-radius:13px;position:relative;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 5px;overflow:hidden;
+    transition:transform .15s,box-shadow .15s,filter .15s;
+    background:linear-gradient(160deg,#16294780,#0b162680);
+    border:2.5px solid var(--cc);box-shadow:0 4px 12px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06)}
+  .card::before{content:"";position:absolute;inset:0;border-radius:11px;
+    background:radial-gradient(120% 80% at 50% -10%,var(--ccg),transparent 65%);opacity:.5}
+  .card .corner{position:absolute;font-family:var(--font-disp);font-weight:900;font-size:12px;color:var(--cc);z-index:2}
+  .card .corner.tl{top:5px;left:8px}.card .corner.br{bottom:5px;right:8px;transform:rotate(180deg)}
+  .card .ctype{font-size:8px;letter-spacing:1px;color:var(--ink-dim);text-transform:uppercase;font-weight:700;z-index:2}
+  .card .cicon{font-size:30px;line-height:1;font-family:var(--font-disp);font-weight:900;color:var(--cc);z-index:2;
+    text-shadow:0 0 12px var(--ccg)}
+  .card .cname{font-size:9.5px;font-weight:700;text-align:center;color:var(--ink);line-height:1.1;z-index:2}
+  .card.selected{transform:translateY(-14px) scale(1.04);box-shadow:0 12px 28px var(--ccg),0 0 0 1px var(--cc)}
+  .card:active{transform:translateY(2px)}
+  .card.unplayable{filter:grayscale(.75) brightness(.6);cursor:not-allowed}
+  /* Wild Color card — rainbow */
+  .card.wild-card{--cc:#fff;--ccg:rgba(255,255,255,.3);
+    border:2.5px solid transparent;
+    background:linear-gradient(#0b1626,#0b1626) padding-box,
+      conic-gradient(from 0deg,#ff5252,#ffc11e,#2fd968,#3a9dff,#ff5252) border-box}
+  .card.wild-card .cicon,.card.wild-card .corner{color:#fff;
+    background:linear-gradient(90deg,#ff5252,#ffc11e,#2fd968,#3a9dff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .card.wild-card::before{background:conic-gradient(from 0deg,rgba(255,82,82,.25),rgba(255,193,30,.25),rgba(47,217,104,.25),rgba(58,157,255,.25),rgba(255,82,82,.25));opacity:.4}
+  /* opponent's hidden hand — face-down backs */
+  .card.cardback{cursor:default;border:2.5px solid rgba(255,255,255,.16);
+    background:repeating-linear-gradient(135deg,#2c1f63 0 8px,#241a52 8px 16px)}
+  .card.cardback::before{display:none}
+  .card.cardback .cb-logo{width:30px;height:30px;border-radius:50%;border:2px solid var(--cyan);color:var(--cyan);
+    display:flex;align-items:center;justify-content:center;font-family:var(--font-disp);font-weight:900;font-size:15px;
+    background:rgba(31,214,196,.12);transform:rotate(-12deg)}
+  .card.unplayable::after{content:"✕";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:30px;color:rgba(255,77,141,.5);font-weight:900;z-index:3}
+
+  /* OVERLAYS / MENUS */
+  .overlay{position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:30px;background:radial-gradient(circle at 50% 35%,rgba(58,32,128,.82),rgba(20,12,56,.95));backdrop-filter:blur(6px);animation:fade .3s}
+  @keyframes fade{from{opacity:0}}
+  .overlay h1{font-family:var(--font-disp);font-weight:900;font-size:clamp(38px,12vw,62px);letter-spacing:4px;
+    background:linear-gradient(180deg,var(--cyan),var(--cyan-deep));-webkit-background-clip:text;background-clip:text;
+    color:transparent;text-shadow:0 0 40px rgba(34,224,255,.4);line-height:.95;margin-bottom:4px}
+  .overlay .sub{color:var(--ink-dim);font-size:13px;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;font-weight:600}
+  .overlay .tagline{color:var(--ink-dim);font-size:13px;max-width:300px;line-height:1.5;margin-bottom:30px}
+  .menu-btns{display:flex;flex-direction:column;gap:12px;width:100%;max-width:260px}
+  .big-btn{font-family:var(--font-disp);font-weight:700;letter-spacing:2px;font-size:15px;padding:16px 30px;border-radius:12px;
+    border:1.5px solid var(--cyan);background:linear-gradient(180deg,rgba(34,224,255,.18),rgba(34,224,255,.05));color:var(--cyan);
+    cursor:pointer;text-transform:uppercase;transition:.15s;box-shadow:0 0 24px rgba(34,224,255,.2);display:flex;align-items:center;justify-content:center;gap:10px}
+  .big-btn:active{transform:scale(.97)}.big-btn svg{width:20px;height:20px}
+  .big-btn.alt{border-color:var(--amber);color:var(--amber);background:linear-gradient(180deg,rgba(255,157,60,.18),rgba(255,157,60,.05));box-shadow:0 0 24px rgba(255,157,60,.2)}
+  .big-btn.ghost{border-color:var(--ink-dim);color:var(--ink-dim);background:transparent;box-shadow:none;font-size:13px;padding:13px}
+  .back-link{margin-top:22px;color:var(--ink-dim);font-size:12px;letter-spacing:1px;cursor:pointer;text-transform:uppercase;font-weight:600}
+  .back-link:active{color:var(--ink)}
+  .room-code{font-family:var(--font-disp);font-weight:900;font-size:34px;letter-spacing:8px;color:var(--cyan);margin:6px 0 4px;text-shadow:0 0 24px rgba(34,224,255,.4)}
+  .room-hint{font-size:12px;color:var(--ink-dim);margin-bottom:24px;max-width:300px}
+  .side-grid{display:flex;gap:14px;margin:10px 0 8px}
+  .side-card{width:120px;padding:20px 14px;border-radius:14px;border:2px solid var(--line);background:rgba(34,224,255,.04);
+    cursor:pointer;transition:.18s;display:flex;flex-direction:column;align-items:center;gap:10px}
+  .side-card.cyan-side{border-color:rgba(34,224,255,.4)}.side-card.amber-side{border-color:rgba(255,157,60,.4)}
+  .side-card:active{transform:scale(.96)}.side-card.taken{opacity:.3;cursor:not-allowed;filter:grayscale(.7)}
+  .side-card.picked{box-shadow:0 0 26px rgba(34,224,255,.45)}.side-card.amber-side.picked{box-shadow:0 0 26px rgba(255,157,60,.45)}
+  .side-card .sicon{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;border-width:2px;border-style:solid}
+  .side-card.cyan-side .sicon{border-color:var(--cyan);color:var(--cyan);background:rgba(34,224,255,.12)}
+  .side-card.amber-side .sicon{border-color:var(--amber);color:var(--amber);background:rgba(255,157,60,.12)}
+  .side-card .sicon svg{width:26px;height:26px}
+  .side-card .sname{font-family:var(--font-disp);font-weight:700;font-size:14px;letter-spacing:1px}
+  .side-card.cyan-side .sname{color:var(--cyan)}.side-card.amber-side .sname{color:var(--amber)}
+  .side-card .sstat{font-size:9.5px;color:var(--ink-dim);letter-spacing:1px;text-transform:uppercase;min-height:12px}
+  .waiting{font-size:12px;color:var(--ink-dim);margin-top:18px;min-height:16px;display:flex;align-items:center;gap:8px;justify-content:center}
+  .overlay.win h1{background:linear-gradient(180deg,var(--gold),var(--amber));-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 40px rgba(255,210,74,.5)}
+  .net-note{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:10px;color:var(--ink-dim);opacity:.6;padding:0 20px;line-height:1.4}
+
+  /* Guided Tutorial menu button (featured) */
+  .big-btn.guide{border-color:var(--gold);color:var(--gold);background:linear-gradient(180deg,rgba(255,210,74,.2),rgba(255,210,74,.06));box-shadow:0 0 26px rgba(255,210,74,.3)}
+
+  /* ===== INTERACTIVE TUTORIAL: spotlight + bubble ===== */
+  .tut-hole{position:absolute;border-radius:14px;pointer-events:none;z-index:70;
+    box-shadow:0 0 0 9999px rgba(6,4,16,.8);
+    border:2.5px solid var(--gold);outline:3px solid rgba(255,210,74,.25);
+    transition:left .25s ease,top .25s ease,width .25s ease,height .25s ease;
+    animation:tutHolePulse 1.4s ease-in-out infinite}
+  @keyframes tutHolePulse{0%,100%{box-shadow:0 0 0 9999px rgba(6,4,16,.8),0 0 0 0 rgba(255,210,74,.5)}50%{box-shadow:0 0 0 9999px rgba(6,4,16,.8),0 0 22px 4px rgba(255,210,74,.45)}}
+  .tut-bubble{position:absolute;top:58px;left:50%;transform:translateX(-50%);z-index:80;
+    width:88%;max-width:360px;background:linear-gradient(160deg,#241a52,#15102e);
+    border:1.5px solid var(--gold);border-radius:16px;padding:14px 16px;box-shadow:0 10px 34px rgba(0,0,0,.55),0 0 24px rgba(255,210,74,.15);
+    animation:tbIn .3s cubic-bezier(.34,1.4,.64,1)}
+  @keyframes tbIn{from{opacity:0;transform:translateX(-50%) translateY(-10px) scale(.96)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+  .tb-title{font-family:var(--font-disp);font-weight:700;font-size:14px;color:var(--gold);letter-spacing:.5px;margin-bottom:5px}
+  .tb-text{font-size:12.5px;color:var(--ink);line-height:1.5;margin-bottom:10px}
+  .tb-row{display:flex;align-items:center;gap:10px}
+  .tb-spacer{flex:1}
+  .tb-waiting{font-size:11px;color:var(--gold);font-weight:700;letter-spacing:.5px;display:flex;align-items:center;gap:5px;animation:tbWait 1s infinite}
+  @keyframes tbWait{0%,100%{opacity:1}50%{opacity:.45}}
+  .tb-next{font-family:var(--font-disp);font-weight:700;font-size:11.5px;letter-spacing:.5px;padding:8px 16px;border-radius:9px;
+    border:1.5px solid var(--gold);color:#1a1140;background:linear-gradient(180deg,#ffe06b,#ffc11e);cursor:pointer}
+  .tb-next:active{transform:scale(.95)}
+  .tb-skip{font-size:10.5px;color:var(--ink-dim);background:none;border:none;cursor:pointer;letter-spacing:.5px;text-decoration:underline;padding:4px}
+  /* strict-lock visuals */
+  .tut-inert{opacity:.3;pointer-events:none;filter:grayscale(.6)}
+  .card.tut-target{box-shadow:0 0 0 2px var(--gold),0 0 22px rgba(255,210,74,.6)!important;animation:tutTargetPulse 1s infinite}
+  .tile.tut-target{box-shadow:inset 0 0 0 2px var(--gold),0 0 16px rgba(255,210,74,.55)!important}
+  @keyframes tutTargetPulse{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+  @keyframes tutHoleShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+  .tut-hole.tut-shake{animation:tutHolePulse 1.4s ease-in-out infinite,tutHoleShake .4s ease}
+  @keyframes tbShake{0%,100%{transform:translateX(-50%)}20%{transform:translateX(-56%)}40%{transform:translateX(-44%)}60%{transform:translateX(-53%)}80%{transform:translateX(-47%)}}
+  .tut-bubble.tb-shake{animation:tbIn .3s cubic-bezier(.34,1.4,.64,1),tbShake .4s ease}
+
+  /* tutorial win celebration */
+  .tut-win-banner{position:absolute;inset:0;z-index:90;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 50% 40%,rgba(255,210,74,.18),rgba(8,6,20,.92));backdrop-filter:blur(4px);
+    animation:twbFade 2.4s ease forwards}
+  @keyframes twbFade{0%{opacity:0}10%{opacity:1}85%{opacity:1}100%{opacity:0}}
+  .twb-emoji{font-size:56px;animation:twbBounce .6s ease infinite alternate}
+  @keyframes twbBounce{from{transform:translateY(0)}to{transform:translateY(-12px)}}
+  .twb-text{font-family:var(--font-disp);font-weight:900;font-size:22px;color:var(--gold);text-shadow:0 0 24px rgba(255,210,74,.6);margin-top:10px;letter-spacing:1px;text-align:center}
+  .twb-sub{font-size:13px;color:var(--ink);margin-top:6px}
+
+  /* ===== COLOR SHIFT notice (deadlock breaker) ===== */
+  .color-shift{position:absolute;inset:0;z-index:45;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    pointer-events:none;animation:csFade 1.5s ease forwards}
+  @keyframes csFade{0%{opacity:0}12%{opacity:1}78%{opacity:1}100%{opacity:0}}
+  .color-shift .cs-burst{position:absolute;width:240px;height:240px;border-radius:50%;
+    background:radial-gradient(circle,var(--sc) 0%,transparent 68%);opacity:.35;animation:csBurst 1.5s ease forwards}
+  @keyframes csBurst{0%{transform:scale(.2)}60%{transform:scale(1.1)}100%{transform:scale(1.3);opacity:0}}
+  .color-shift .cs-txt{font-family:var(--font-disp);font-weight:900;font-size:30px;letter-spacing:3px;color:var(--sc);
+    text-shadow:0 0 24px var(--sc);z-index:1}
+  .color-shift .cs-sub{font-size:13px;color:var(--ink);letter-spacing:1px;margin-top:6px;z-index:1;font-weight:600}
+  /* Wild Color picker */
+  .color-picker{position:absolute;inset:0;z-index:56;display:flex;align-items:center;justify-content:center;
+    background:rgba(8,6,20,.82);backdrop-filter:blur(4px);animation:fade .2s}
+  .cp-panel{background:linear-gradient(160deg,#241a52,#15102e);border:1.5px solid var(--line);border-radius:18px;
+    padding:22px;box-shadow:var(--shadow);text-align:center}
+  .cp-title{font-family:var(--font-disp);font-weight:700;font-size:14px;letter-spacing:1px;color:var(--ink);margin-bottom:16px}
+  .cp-row{display:flex;gap:14px;justify-content:center}
+  .cp-swatch{width:56px;height:56px;border-radius:14px;cursor:pointer;transition:.15s;border:2px solid rgba(255,255,255,.3);
+    box-shadow:0 4px 14px rgba(0,0,0,.4)}
+  .cp-swatch:active{transform:scale(.9)}.cp-swatch:hover{transform:scale(1.08);box-shadow:0 0 20px currentColor}
+
+  /* ===== GAME CLOCKS (top-middle) ===== */
+  .game-clocks{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:7;display:flex;gap:8px;align-items:center}
+  .gclock{display:flex;flex-direction:column;align-items:center;padding:4px 12px;border-radius:11px;
+    border:1.5px solid var(--line);background:rgba(20,12,48,.8);min-width:62px;transition:.2s;backdrop-filter:blur(4px)}
+  .gclock .gc-label{font-size:8px;letter-spacing:1.5px;font-weight:700;text-transform:uppercase;opacity:.7}
+  .gclock .gc-time{font-family:var(--font-disp);font-weight:700;font-size:15px;line-height:1.1}
+  .gclock.cyan{color:var(--cyan)}.gclock.amber{color:var(--amber)}
+  .gclock.shared{color:var(--ink);border-color:rgba(255,255,255,.25);background:rgba(20,12,48,.92);padding:5px 18px}
+  .gclock.shared .gc-time{font-size:17px}
+  .gclock.running{box-shadow:0 0 16px currentColor;border-color:currentColor;background:rgba(20,12,48,.95)}
+  .gclock.low .gc-time{color:var(--uno-red);animation:timerPulse .6s infinite}
+
+  /* ===== bigger piles, further from board ===== */
+  .side-pile.left{margin-right:8px}.side-pile.right{margin-left:8px}
+  .pile{width:54px;height:78px;border-radius:11px;position:relative;cursor:pointer;transition:transform .12s}
+
+  /* ===== OFFICER CHOOSER ===== */
+  .officer-chooser{position:absolute;inset:0;z-index:55;display:flex;align-items:center;justify-content:center;
+    background:rgba(8,6,20,.8);backdrop-filter:blur(4px);animation:fade .2s}
+  .oc-panel{background:linear-gradient(160deg,#241a52,#15102e);border:1.5px solid var(--line);border-radius:18px;
+    padding:20px;max-width:320px;width:86%;box-shadow:var(--shadow)}
+  .oc-title{font-family:var(--font-disp);font-weight:700;font-size:14px;letter-spacing:1px;text-align:center;margin-bottom:14px;color:var(--ink)}
+  .oc-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .oc-pick{flex:0 0 auto;width:84px;padding:12px 6px;border-radius:12px;border:1.5px solid var(--line);
+    background:rgba(34,224,255,.06);cursor:pointer;transition:.15s;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .oc-pick:active{transform:scale(.95)}.oc-pick:hover{border-color:var(--cyan);background:rgba(34,224,255,.12)}
+  .oc-ico{width:34px;height:34px;color:var(--cyan)}.oc-ico svg{width:100%;height:100%}
+  .oc-name{font-size:10px;font-weight:600;color:var(--ink);letter-spacing:.5px}
+  .oc-cancel{margin-top:14px;text-align:center;color:var(--ink-dim);font-size:12px;letter-spacing:1px;cursor:pointer;text-transform:uppercase;font-weight:600}
+  .oc-cancel:active{color:var(--ink)}
+
+  /* ===== TUTORIAL ===== */
+  .overlay.tut{justify-content:flex-start;padding:0}
+  .tut-head{width:100%;display:flex;align-items:center;justify-content:space-between;padding:18px 20px 12px;border-bottom:1px solid var(--line)}
+  .tut-close{font-size:20px;color:var(--ink-dim);cursor:pointer;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:8px}
+  .tut-close:active{background:rgba(255,255,255,.08)}
+  .tut-scroll{width:100%;flex:1;overflow-y:auto;padding:16px 20px 40px}
+  .tut-intro{font-size:13px;line-height:1.6;color:var(--ink-dim);margin-bottom:8px}
+  .tut-intro b{color:var(--cyan)}
+  .tut-section{font-family:var(--font-disp);font-weight:700;font-size:12px;letter-spacing:2px;color:var(--ink);
+    text-transform:uppercase;margin:22px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .tut-piece{display:flex;gap:14px;align-items:center;margin-bottom:14px}
+  .tp-left{flex:0 0 auto}
+  .mini-board{display:grid;grid-template-columns:repeat(5,16px);grid-template-rows:repeat(5,16px);gap:2px}
+  .mb-cell{width:16px;height:16px;border-radius:3px;background:var(--grid);display:flex;align-items:center;justify-content:center}
+  .mb-cell.ctr{background:rgba(255,210,74,.2)}.mb-cell.ctr svg{width:13px;height:13px;color:var(--gold)}
+  .mb-cell.mb-move{background:rgba(61,220,110,.55)}
+  .mb-cell.mb-cap{background:rgba(255,77,141,.6)}
+  .tp-name{font-family:var(--font-disp);font-weight:700;font-size:14px;color:var(--cyan);margin-bottom:3px}
+  .tp-desc{font-size:12px;line-height:1.5;color:var(--ink-dim)}
+  .tut-legend{font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:6px;margin-top:4px}
+  .tut-legend .ll{width:13px;height:13px;border-radius:3px;display:inline-block;vertical-align:middle}
+  .tut-card{display:flex;gap:12px;align-items:center;margin-bottom:10px;padding:8px;border-radius:10px;background:rgba(255,255,255,.03)}
+  .tc-ico{flex:0 0 auto;width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-disp);font-weight:900;font-size:18px;border:2px solid var(--line)}
+  .tc-ico.move{color:var(--green);border-color:rgba(61,220,110,.5)}
+  .tc-ico.power{color:var(--magenta);border-color:rgba(255,77,141,.5)}
+  .tc-ico.util{color:var(--shield);border-color:rgba(138,107,255,.5)}
+  .tc-ico.wild{border-color:transparent;background:linear-gradient(#15102e,#15102e) padding-box,conic-gradient(from 0deg,#ff5252,#ffc11e,#2fd968,#3a9dff,#ff5252) border-box;color:#fff}
+  .tc-name{font-weight:700;font-size:13px;color:var(--ink)}
+  .tc-desc{font-size:11.5px;color:var(--ink-dim);line-height:1.4}
+  .toast{position:absolute;top:54px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:8px 16px;font-size:12.5px;font-weight:600;color:var(--ink);z-index:40;box-shadow:var(--shadow);
+    opacity:0;transition:.25s;pointer-events:none;letter-spacing:.4px;white-space:nowrap;max-width:90%}
+  .toast.show{opacity:1;top:62px}
+  .toast.power-act{border-color:var(--magenta);color:var(--magenta)}.toast.amber-act{border-color:var(--amber);color:var(--amber)}
+  .toast.warn{border-color:var(--uno-yellow);color:var(--uno-yellow)}
+  .float{position:absolute;font-family:var(--font-disp);font-weight:900;font-size:18px;color:var(--magenta);text-shadow:0 0 12px var(--magenta);pointer-events:none;z-index:30;animation:floatUp .8s forwards}
+  @keyframes floatUp{0%{opacity:1;transform:translateY(0) scale(.6)}30%{transform:translateY(-6px) scale(1.2)}100%{opacity:0;transform:translateY(-26px) scale(1)}}
+  @media (max-width:380px){.card{width:64px;height:94px}.side-card{width:108px}.pile{width:52px;height:76px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="topbar">
+    <button class="quit-btn" id="quitBtn" title="Quit match" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+    </button>
+    <div class="player-tag cyan-tag" id="tagCyan"><span class="dot"></span><span id="nameCyan">CYAN</span></div>
+    <div class="turn-badge" id="turnBadge">— — —</div>
+    <div class="player-tag amber-tag" id="tagAmber"><span id="nameAmber">AMBER</span><span class="dot"></span></div>
+  </div>
+
+  <!-- QUIT CONFIRM -->
+  <div class="overlay confirm" id="quitConfirm" style="display:none">
+    <div class="sub">Leave the match?</div>
+    <h1 style="font-size:clamp(30px,9vw,46px)">QUIT?</h1>
+    <div class="tagline">Your current match will end and you'll return to the main menu.</div>
+    <div class="menu-btns">
+      <button class="big-btn alt" id="quitYes">Quit to Menu</button>
+      <button class="big-btn ghost" id="quitNo">Keep Playing</button>
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <!-- Single shared game timer, top-middle above the board -->
+    <div class="game-clocks" id="gameClocks">
+      <div class="gclock shared" id="gcShared"><span class="gc-label">GAME TIME</span><span class="gc-time" id="gcSharedTime">10:00</span></div>
+    </div>
+    <!-- DRAW stack flanks the left of the board -->
+    <div class="side-pile left">
+      <div class="pile draw-stack" id="drawStack" title="Draw a card">
+        <div class="logo">M</div>
+        <div class="count" id="deckCount">0</div>
+      </div>
+      <div class="pile-label">DRAW</div>
+    </div>
+    <div class="board-stage">
+      <div class="board" id="board"></div>
+      <svg class="timer-ring" id="timerRing" viewBox="0 0 100 200" preserveAspectRatio="none">
+        <rect class="timer-track" x="1.5" y="1.5" width="97" height="197" rx="9" pathLength="1000"/>
+        <rect class="timer-progress" id="timerProgress" x="1.5" y="1.5" width="97" height="197" rx="9" pathLength="1000"/>
+      </svg>
+    </div>
+    <!-- MATCH pile flanks the right of the board -->
+    <div class="side-pile right">
+      <div class="pile discard empty" id="discardPile">
+        <div class="dval" id="discardVal">—</div>
+        <div class="dsmall" id="discardSmall">empty</div>
+      </div>
+      <div class="pile-label">MATCH</div>
+    </div>
+    <div class="reveal-stage" id="revealStage"><div class="backdrop"></div></div>
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <div class="hand-zone">
+    <div class="action-bar"><div class="hint idle" id="hint">—</div></div>
+    <div class="table-felt">
+      <div class="hand-side">
+        <div class="hand-meta"><span id="handOwner">HAND</span><span id="handCount">0 / 7</span></div>
+        <div class="hand" id="hand"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN MENU -->
+  <div class="overlay" id="menuMain">
+    <div class="sub">Project MoveBound</div>
+    <h1>MOVE<br>BOUND</h1>
+    <div class="menu-btns" style="margin-top:8px">
+      <button class="big-btn guide" id="btnGuide">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5L12 3z"/></svg>
+        Guided Tutorial
+      </button>
+      <button class="big-btn" id="btnLocal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3 2.5-5 6-5s6 2 6 5M15 20c0-2 1-3.5 3-3.5"/></svg>
+        Local Multiplayer
+      </button>
+      <button class="big-btn alt" id="btnAI">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="13" rx="2"/><path d="M9 2v4M15 2v4M9 12h.01M15 12h.01M9 15.5h6"/></svg>
+        VS AI
+      </button>
+      <button class="big-btn ghost" id="btnTutorial">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 16.5h.01"/></svg>
+        How to Play (reference)
+      </button>
+      <button class="big-btn ghost" id="btnCredits">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.2"/><path d="M5 21c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/></svg>
+        Credits
+      </button>
+    </div>
+  </div>
+
+  <!-- CREDITS -->
+  <div class="overlay" id="menuCredits" style="display:none">
+    <div class="sub">MoveBound</div>
+    <h1 style="font-size:clamp(26px,8vw,40px)">CREDITS</h1>
+    <div class="tagline" style="margin-top:10px">Designed and Developed by<br><b style="color:var(--gold);font-size:16px">Pratham Warambhey</b></div>
+    <button class="big-btn ghost" id="creditsClose" style="margin-top:26px">‹ Back</button>
+  </div>
+
+
+  <!-- FIRST-LAUNCH PROMPT -->
+  <div class="overlay" id="firstLaunch" style="display:none">
+    <div class="sub">First time here?</div>
+    <h1 style="font-size:clamp(30px,9vw,48px)">LEARN<br>TO PLAY</h1>
+    <div class="tagline">Play a short guided match — I'll point at exactly what to tap, and you'll capture an enemy Commander by the end.</div>
+    <div class="menu-btns">
+      <button class="big-btn guide" id="flYes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5L12 3z"/></svg>
+        Start Guided Tutorial
+      </button>
+      <button class="big-btn ghost" id="flNo">Skip, I know what I'm doing</button>
+    </div>
+  </div>
+
+  <!-- TUTORIAL -->
+  <div class="overlay tut" id="menuTutorial" style="display:none">
+    <div class="tut-head"><div class="sub" style="margin:0">How to Play</div><div class="tut-close" id="tutClose">✕</div></div>
+    <div class="tut-scroll" id="tutScroll"></div>
+  </div>
+
+  <!-- ROOM / SIDE SELECT -->
+  <div class="overlay" id="menuRoom" style="display:none">
+    <div class="sub" id="roomSub">Multiplayer Room</div>
+    <div class="room-code" id="roomCode">— — — —</div>
+    <div class="room-hint" id="roomHint">Both players choose a side. Picking one locks it for the other.</div>
+    <div class="side-grid">
+      <div class="side-card cyan-side" id="sideCyan"><div class="sicon" id="sideCyanIcon"></div><div class="sname">CYAN</div><div class="sstat" id="sideCyanStat">Open</div></div>
+      <div class="side-card amber-side" id="sideAmber"><div class="sicon" id="sideAmberIcon"></div><div class="sname">AMBER</div><div class="sstat" id="sideAmberStat">Open</div></div>
+    </div>
+    <div class="waiting" id="roomWaiting"></div>
+    <div class="back-link" id="roomBack">‹ Back to menu</div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   MoveBound v3 — tactical card combat with UNO color matching
+   Managers: Game·Turn·Board·Units·Movement·Cards·Combat·UI·Audio·Net·Room
+   Net = transport seam (see comment block) for future online play.
+   ===================================================================== */
+
+const COLS=5,ROWS=10,HAND_MAX=7,START_HAND=5,SUDDEN_DEATH_TURN=60,REVEAL_MS=2000;
+const TURN_SECONDS=11; // per-turn countdown (tune for pace)
+const GAME_SECONDS=600; // per-side total game clock (10 minutes); reaching 0 = loss
+
+const UNIT_DEFS={
+  commander:{name:'Commander',pattern:'king',  glyph:'crown'},
+  guardian: {name:'Guardian', pattern:'queen', glyph:'shield'},
+  cannon:   {name:'Cannon',   pattern:'rook',  glyph:'cannon'},
+  raider:   {name:'Raider',   pattern:'knight',glyph:'raider'},
+  phantom:  {name:'Phantom',  pattern:'diag',  glyph:'phantom'},
+  soldier:  {name:'Soldier',  pattern:'pawn',  glyph:'soldier'}, // pawn: fwd move, diag-fwd capture only
+};
+const GLYPHS={
+  // Commander — crown with a center gem (royalty; the objective). Moves 1 in any direction.
+  crown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4 9l3.5 3 4.5-6 4.5 6L20 9l-1.6 9H5.6L4 9z" fill="currentColor" fill-opacity="0.85"/><circle cx="12" cy="8.5" r="1.3" fill="#fff"/></svg>',
+  // Guardian — shield with 8-way arrows (queen-like: any direction, any distance)
+  shield:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l7 2.5v5.5c0 4.5-3 8-7 9.5-4-1.5-7-5-7-9.5V5l7-2.5z" fill="currentColor" fill-opacity="0.28"/><path d="M12 7v10M7 12h10M8.7 8.7l6.6 6.6M15.3 8.7l-6.6 6.6" stroke-width="1.3"/></svg>',
+  // Cannon — circular turret with a barrel + orthogonal cross (moves in straight lines)
+  cannon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="5" fill="currentColor" fill-opacity="0.3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke-width="2"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg>',
+  // Raider — knight-ish head with an L-path (jumps in an L)
+  raider:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20c0-5 2-8 4-10-1-1.5-.5-3.5 1-4.5.3 1.3 1 2 2 2.2 2 .4 3.5 2.3 3.5 5.3 0 4-3 7-6.5 7H7z" fill="currentColor" fill-opacity="0.55"/><path d="M16 16l0 3 3 0" stroke-width="1.7"/></svg>',
+  // Phantom — diamond with diagonal arrows (moves diagonally)
+  phantom:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l8 8-8 8-8-8 8-8z" fill="currentColor" fill-opacity="0.28"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke-width="1.5"/></svg>',
+  // Soldier — upward chevron + figure (advances forward, captures diagonally)
+  soldier:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l5 5h-3v5h-4V8H7l5-5z" fill="currentColor" fill-opacity="0.7"/><circle cx="12" cy="17.5" r="3.2" fill="currentColor" fill-opacity="0.55"/></svg>',
+};
+/* card "type" for UNO matching: each move value is its own type, each power its own */
+const CARD_DEFS={
+  m1:{kind:'move',cat:'move',name:'Move 1',val:1,icon:'1',type:'v1',desc:'Move a unit up to 1 tile'},
+  m2:{kind:'move',cat:'move',name:'Move 2',val:2,icon:'2',type:'v2',desc:'Move a unit up to 2 tiles'},
+  m3:{kind:'move',cat:'move',name:'Move 3',val:3,icon:'3',type:'v3',desc:'Move a unit up to 3 tiles'},
+  m4:{kind:'move',cat:'move',name:'Move 4',val:4,icon:'4',type:'v4',desc:'Move a unit up to 4 tiles'},
+  m5:{kind:'move',cat:'move',name:'Move 5',val:5,icon:'5',type:'v5',desc:'Move a unit up to 5 tiles'},
+  skip:{kind:'power',cat:'power',name:'Skip',icon:'⏭',type:'skip',desc:'Opponent loses their next turn'},
+  recall:{kind:'power',cat:'util',name:'Recall',icon:'↺',type:'recall',desc:'Revive a fallen Soldier on a Soldier tile'},
+  officer:{kind:'power',cat:'util',name:'Recall Officer',icon:'★',type:'officer',desc:'Revive a fallen officer (not Commander)'},
+  swap:{kind:'power',cat:'util',name:'Swap',icon:'⇄',type:'swap',desc:'Flip the entire board 180°'},
+  wild:{kind:'power',cat:'wild',name:'Wild Color',icon:'✦',type:'wild',desc:'Play anytime — choose the new match colour, then your turn ends'},
+};
+const UNO_COLORS=['red','yellow','green','blue'];
+const COLOR_VAR={red:'--uno-red',yellow:'--uno-yellow',green:'--uno-green',blue:'--uno-blue'};
+
+const HOME={cyan:[8,9],amber:[0,1]};
+// Row roles (absolute data coords, before any Swap flip):
+//  cyan: officer/back row = 9, soldier row = 8 ; amber: officer row = 0, soldier row = 1
+const OFFICER_ROW={cyan:9,amber:0};
+const SOLDIER_ROW={cyan:8,amber:1};
+const OFFICER_TYPES=['guardian','cannon','raider','phantom']; // recallable officers (never commander)
+const FORWARD={cyan:-1,amber:1};
+
+/* ---------- BOARD ---------- */
+const Board={grid:[],flipped:false,
+  init(){this.grid=Array.from({length:ROWS},()=>Array(COLS).fill(null));this.flipped=false;},
+  inBounds(r,c){return r>=0&&r<ROWS&&c>=0&&c<COLS;},
+  at(r,c){return this.inBounds(r,c)?this.grid[r][c]:undefined;},
+  set(r,c,id){this.grid[r][c]=id;},clear(r,c){this.grid[r][c]=null;},
+  flip(){const ng=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const id=this.grid[r][c];
+      if(id){const nr=ROWS-1-r,nc=COLS-1-c;ng[nr][nc]=id;const u=Units.get(id);u.r=nr;u.c=nc;}}
+    this.grid=ng;this.flipped=!this.flipped;}
+};
+
+/* ---------- UNITS ---------- */
+const Units={map:{},nextId:1,
+  reset(){this.map={};this.nextId=1;},
+  create(type,owner,r,c){const id='u'+(this.nextId++);
+    const u={id,type,owner,r,c,alive:true,def:UNIT_DEFS[type]};this.map[id]=u;Board.set(r,c,id);return u;},
+  get(id){return this.map[id];},
+  ofOwner(o){return Object.values(this.map).filter(u=>u.alive&&u.owner===o);},
+  commander(o){return Object.values(this.map).find(u=>u.type==='commander'&&u.owner===o&&u.alive);},
+  kill(u){u.alive=false;Board.clear(u.r,u.c);},
+};
+
+/* ---------- MOVEMENT ---------- */
+const Movement={
+  ORTHO:[[-1,0],[1,0],[0,-1],[0,1]],DIAG:[[-1,-1],[-1,1],[1,-1],[1,1]],
+  ALL:[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]],
+  KNIGHT:[[-2,-1],[-2,1],[2,-1],[2,1],[-1,-2],[-1,2],[1,-2],[1,2]],
+  fwd(unit){let f=FORWARD[unit.owner];if(Board.flipped)f=-f;return f;},
+  compute(unit,maxSteps){
+    const out={moves:[],attacks:[]};const{pattern}=unit.def;const seen=new Set();
+    /* PAWN: forward straight move (up to value); diagonal-forward ONLY to capture enemy */
+    if(pattern==='pawn'){
+      const f=this.fwd(unit);
+      // straight forward moves, blocked by any unit
+      for(let step=1;step<=maxSteps;step++){
+        const r=unit.r+f*step,c=unit.c;
+        if(!Board.inBounds(r,c))break;
+        if(Board.at(r,c))break; // cannot move onto/through anyone, no straight capture
+        out.moves.push({r,c});
+      }
+      // diagonal-forward captures (one tile diagonally), only if enemy present
+      for(const dc of [-1,1]){
+        const r=unit.r+f,c=unit.c+dc;
+        if(!Board.inBounds(r,c))continue;
+        const occ=Board.at(r,c);
+        if(occ){const o=Units.get(occ);if(o.owner!==unit.owner)out.attacks.push({r,c,target:occ});}
+      }
+      return out;
+    }
+    let dirs;
+    if(pattern==='queen'||pattern==='king')dirs=this.ALL;
+    else if(pattern==='rook')dirs=this.ORTHO;
+    else if(pattern==='diag')dirs=this.DIAG;
+    else dirs=this.ALL;
+    if(pattern==='knight'){
+      const jumps=Math.max(1,Math.ceil(maxSteps/2));
+      let frontier=[{r:unit.r,c:unit.c}];const visited=new Set([unit.r+','+unit.c]);
+      for(let s=0;s<jumps;s++){const next=[];
+        for(const node of frontier)for(const[dr,dc]of this.KNIGHT){
+          const r=node.r+dr,c=node.c+dc;if(!Board.inBounds(r,c))continue;const key=r+','+c;const occ=Board.at(r,c);
+          if(occ){const o=Units.get(occ);if(o.owner!==unit.owner&&!seen.has(key)){out.attacks.push({r,c,target:occ});seen.add(key);}continue;}
+          if(!visited.has(key)){visited.add(key);if(!seen.has(key)){out.moves.push({r,c});seen.add(key);}next.push({r,c});}}
+        frontier=next;}
+      return out;
+    }
+    const reach=pattern==='king'?1:maxSteps;
+    const push=(r,c)=>{if(!Board.inBounds(r,c))return'block';const occ=Board.at(r,c);const key=r+','+c;
+      if(occ){const o=Units.get(occ);if(o.owner!==unit.owner&&!seen.has(key)){out.attacks.push({r,c,target:occ});seen.add(key);}return'block';}
+      if(!seen.has(key)){out.moves.push({r,c});seen.add(key);}return'open';};
+    for(const[dr,dc]of dirs)for(let step=1;step<=reach;step++){if(push(unit.r+dr*step,unit.c+dc*step)!=='open')break;}
+    return out;
+  }
+};
+
+/* ---------- CARDS (with UNO colors + match pile) ---------- */
+const Cards={
+  deck:[],hands:{cyan:[],amber:[]},discard:[],top:null, // top = {color,type,kind} last played
+  randColor(){return UNO_COLORS[Math.random()*UNO_COLORS.length|0];},
+  make(id){return {uid:'c'+Math.random().toString(36).slice(2,7),id,color:this.randColor()};},
+  build(){
+    this.deck=[];const add=(id,n)=>{for(let i=0;i<n;i++)this.deck.push(this.make(id));};
+    add('m1',6);add('m2',7);add('m3',6);add('m4',5);add('m5',4);
+    add('skip',3);add('recall',3);add('officer',4);add('swap',4);add('wild',5);
+    this.shuffle();this.hands={cyan:[],amber:[]};this.discard=[];this.top=null;
+    // seed the match pile with a starter card so there's always something to match
+    const seed=this.deck.pop();this.discard.push(seed);this.top={color:seed.color,type:CARD_DEFS[seed.id].type,kind:CARD_DEFS[seed.id].kind,id:seed.id};
+  },
+  // Unbiased Fisher–Yates using crypto RNG (uniform, no modulo bias) for a fair shuffle.
+  rand(n){ // uniform int in [0,n)
+    if(window.crypto&&window.crypto.getRandomValues){
+      const max=Math.floor(0x100000000/n)*n; let x;
+      const a=new Uint32Array(1);
+      do{window.crypto.getRandomValues(a);x=a[0];}while(x>=max);
+      return x%n;
+    }
+    return Math.floor(Math.random()*n);
+  },
+  shuffle(){for(let i=this.deck.length-1;i>0;i--){const j=this.rand(i+1);[this.deck[i],this.deck[j]]=[this.deck[j],this.deck[i]];}},
+  refillIfNeeded(){if(this.deck.length===0&&this.discard.length>1){const keep=this.discard.pop();this.deck=this.discard;this.discard=[keep];this.shuffle();}},
+  draw(side){this.refillIfNeeded();if(this.deck.length===0)return null;if(this.hands[side].length>=HAND_MAX)return 'full';
+    const card=this.deck.pop();this.hands[side].push(card);return card;},
+  /* UNO match test: Wild is always playable; otherwise color OR type matches the pile top */
+  playable(card){const def=CARD_DEFS[card.id];if(def.type==='wild')return true;if(!this.top)return true;
+    return card.color===this.top.color || def.type===this.top.type;},
+  hasPlayable(side){return this.hands[side].some(c=>this.playable(c));},
+  play(side,uid){const h=this.hands[side];const i=h.findIndex(c=>c.uid===uid);if(i<0)return null;
+    const[c]=h.splice(i,1);this.discard.push(c);this.top={color:c.color,type:CARD_DEFS[c.id].type,kind:CARD_DEFS[c.id].kind,id:c.id};return c;},
+  // True deadlock = NEITHER player can currently play. (We surface a manual color-change
+  // option and also auto-break if no draw can help.) This catches the AI pass loop too.
+  isDeadlocked(){
+    return !this.hasPlayable('cyan') && !this.hasPlayable('amber');
+  },
+  // Hard deadlock = neither can play AND no draw can possibly help (deck empty OR both full).
+  isHardDeadlock(){
+    if(this.hasPlayable('cyan')||this.hasPlayable('amber')) return false;
+    const deckEmpty=this.deck.length===0;
+    const bothFull=this.hands.cyan.length>=HAND_MAX && this.hands.amber.length>=HAND_MAX;
+    return deckEmpty||bothFull;
+  },
+  // Shift the match pile to a NEW random color (never the current one) to break the loop.
+  // If preferSide is given, prefer a color that unblocks that side specifically.
+  // Otherwise (e.g. the automatic deadlock-breaker), prefer a color that unblocks EITHER
+  // side so the auto-resolve actually frees play instead of landing on another dead color.
+  shiftColor(preferSide){
+    if(!this.top) return null;
+    const others=UNO_COLORS.filter(c=>c!==this.top.color);
+    const helpsSide=(col,side)=>this.hands[side].some(c=>c.color===col);
+    let pool;
+    if(preferSide) pool=others.filter(col=>helpsSide(col,preferSide));
+    else pool=others.filter(col=>helpsSide(col,'cyan')||helpsSide(col,'amber'));
+    if(!pool.length) pool=others; // nothing helps anyone — just pick any new color
+    const nc=pool[this.rand(pool.length)];
+    this.top.color=nc;
+    return nc;
+  },
+};
+
+/* ---------- AUDIO ---------- */
+const Audio={ctx:null,
+  init(){try{this.ctx=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}},
+  blip(f=440,d=.08,t='sine',v=.18){if(!this.ctx)return;const o=this.ctx.createOscillator(),g=this.ctx.createGain();
+    o.type=t;o.frequency.value=f;o.connect(g);g.connect(this.ctx.destination);
+    g.gain.setValueAtTime(v,this.ctx.currentTime);g.gain.exponentialRampToValueAtTime(.0001,this.ctx.currentTime+d);o.start();o.stop(this.ctx.currentTime+d);},
+  move(){this.blip(330,.07,'triangle');},card(){this.blip(620,.06,'square',.12);},draw(){this.blip(440,.05,'square',.1);this.blip(560,.06,'square',.09);},
+  kill(){this.blip(140,.22,'sawtooth',.22);setTimeout(()=>this.blip(90,.25,'sawtooth',.2),60);},
+  power(){this.blip(880,.1,'sine',.16);this.blip(1180,.12,'sine',.12);},
+  flip(){[300,500,700,500,300].forEach((f,i)=>setTimeout(()=>this.blip(f,.1,'triangle',.14),i*70));},
+  nope(){this.blip(180,.18,'sawtooth',.18);},
+  tick(){this.blip(880,.05,'square',.1);},
+  timeout(){this.blip(220,.3,'sawtooth',.2);setTimeout(()=>this.blip(160,.35,'sawtooth',.18),120);},
+  win(){[523,659,784,1046].forEach((f,i)=>setTimeout(()=>this.blip(f,.18,'triangle',.2),i*120));},
+  lose(){[440,330,220].forEach((f,i)=>setTimeout(()=>this.blip(f,.3,'sawtooth',.2),i*180));},
+};
+
+/* ---------- UI ---------- */
+const UI={
+  boardEl:null,handEl:null,
+  initBoard(){this.boardEl=document.getElementById('board');this.handEl=document.getElementById('hand');
+    this.boardEl.classList.remove('flipped');this.boardEl.innerHTML='';
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const t=document.createElement('div');
+      t.className='tile'+(((r+c)%2)?' alt':'');t.dataset.r=r;t.dataset.c=c;
+      t.addEventListener('click',()=>Game.onTileTap(r,c));this.boardEl.appendChild(t);}},
+  tile(r,c){return this.boardEl.children[r*COLS+c];},
+  renderBoard(){for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const t=this.tile(r,c);
+    t.classList.remove('movable','attackable','selected','selectable');const id=Board.at(r,c);let uEl=t.querySelector('.unit');
+    if(id){const u=Units.get(id);if(!uEl){uEl=document.createElement('div');uEl.className='unit';t.appendChild(uEl);}
+      uEl.className='unit '+u.owner+(u.type==='commander'?' commander':'');uEl.innerHTML=GLYPHS[u.def.glyph];}
+    else if(uEl)uEl.remove();}},
+  highlight(moves,attacks,sel){if(sel)this.tile(sel.r,sel.c).classList.add('selected');
+    moves.forEach(m=>this.tile(m.r,m.c).classList.add('movable'));attacks.forEach(a=>this.tile(a.r,a.c).classList.add('attackable'));},
+  clearHi(){this.boardEl.querySelectorAll('.tile').forEach(t=>t.classList.remove('movable','attackable','selected','selectable'));},
+  cv(color){return `var(${COLOR_VAR[color]})`;},
+  cvg(color){const map={red:'rgba(255,77,82,.4)',yellow:'rgba(255,207,51,.4)',green:'rgba(61,220,110,.4)',blue:'rgba(58,160,255,.4)'};return map[color];},
+  renderHand(side){const hand=Cards.hands[side];this.handEl.innerHTML='';
+    // Privacy: if this is the AI opponent's hand, show face-down backs only — never the real cards.
+    const hidden = (Game.mode==='ai' && side===Game.aiSide);
+    if(hidden){
+      hand.forEach(()=>{const el=document.createElement('div');el.className='card cardback';
+        el.innerHTML=`<div class="cb-logo">M</div>`;this.handEl.appendChild(el);});
+      document.getElementById('handOwner').textContent='OPPONENT';
+      document.getElementById('handCount').textContent=`${hand.length} / ${HAND_MAX}`;
+      document.getElementById('deckCount').textContent=Cards.deck.length;this.renderDiscard();return;
+    }
+    hand.forEach(c=>{const def=CARD_DEFS[c.id];const el=document.createElement('div');el.className='card';
+      el.dataset.uid=c.uid;
+      const isWild=def.type==='wild';
+      if(isWild){el.classList.add('wild-card');}
+      else{el.style.setProperty('--cc',this.cv(c.color));el.style.setProperty('--ccg',this.cvg(c.color));}
+      const playable=Cards.playable(c);if(!playable)el.classList.add('unplayable');
+      if(Tutorial.active){ // strict lock: only the exact prescribed card looks (and is) tappable
+        const s=Tutorial.current();
+        const isTarget = s && s.awaiting==='card' && c.uid===s.forceCardUid;
+        el.classList.toggle('unplayable', !isTarget);
+        if(isTarget) el.classList.add('tut-target');
+      }
+      if(Game.selCardUid===c.uid)el.classList.add('selected');
+      el.innerHTML=`<div class="corner tl">${def.icon}</div><div class="corner br">${def.icon}</div>
+        <div class="ctype">${def.cat}</div><div class="cicon">${def.icon}</div><div class="cname">${def.name}</div>`;
+      el.addEventListener('click',()=>Game.onCardTap(c.uid));this.handEl.appendChild(el);});
+    document.getElementById('handOwner').textContent=(side==='cyan'?'CYAN':'AMBER')+' HAND';
+    document.getElementById('handCount').textContent=`${hand.length} / ${HAND_MAX}`;
+    document.getElementById('deckCount').textContent=Cards.deck.length;
+    this.renderDiscard();},
+  renderDiscard(){const t=Cards.top;const pile=document.getElementById('discardPile');
+    if(!t){pile.className='pile discard empty';document.getElementById('discardVal').textContent='—';document.getElementById('discardSmall').textContent='empty';return;}
+    pile.className='pile discard';pile.style.setProperty('--dc',this.cv(t.color));pile.style.setProperty('--dcg',this.cvg(t.color));
+    const def=CARD_DEFS[t.id];document.getElementById('discardVal').textContent=def.icon;
+    document.getElementById('discardSmall').textContent=t.color;},
+  setTurn(side,label){const b=document.getElementById('turnBadge');b.textContent=label||(side==='cyan'?'CYAN TURN':'AMBER TURN');
+    b.className='turn-badge '+(side==='cyan'?'cyan-turn':'amber-turn');
+    document.getElementById('tagCyan').classList.toggle('dimmed',side!=='cyan');
+    document.getElementById('tagAmber').classList.toggle('dimmed',side!=='amber');},
+  setHint(t,cls=''){const h=document.getElementById('hint');h.textContent=t;h.className='hint '+cls;},
+  toast(m,cls=''){const t=document.getElementById('toast');t.textContent=m;t.className='toast '+cls;
+    requestAnimationFrame(()=>t.classList.add('show'));clearTimeout(this._tt);this._tt=setTimeout(()=>t.classList.remove('show'),1700);},
+  float(r,c,txt){const t=this.tile(r,c);const f=document.createElement('div');f.className='float';f.textContent=txt;
+    const br=this.boardEl.getBoundingClientRect(),tr=t.getBoundingClientRect();
+    f.style.left=(tr.left-br.left+tr.width/2-12)+'px';f.style.top=(tr.top-br.top+tr.height/2-12)+'px';
+    this.boardEl.appendChild(f);setTimeout(()=>f.remove(),800);},
+  shake(){this.boardEl.animate([{transform:this._t()},{transform:this._t('-4px,2px')},{transform:this._t('4px,-2px')},{transform:this._t()}],{duration:160});},
+  _t(d='0,0'){const rot=(this.swapFlip!==this.viewFlip);return (rot?'rotate(180deg) ':'')+`translate(${d})`;},
+  drawPulse(on){document.getElementById('drawStack').classList.toggle('pulse',on);},
+  colorShift(newColor){
+    Audio.power&&Audio.power();
+    const el=document.createElement('div');el.className='color-shift';
+    el.style.setProperty('--sc',this.cv(newColor));
+    el.innerHTML=`<div class="cs-burst"></div><div class="cs-txt">COLOR SHIFT!</div><div class="cs-sub">match is now <b style="color:${this.cv(newColor)}">${newColor.toUpperCase()}</b></div>`;
+    (this.boardEl?this.boardEl.parentElement:document.getElementById('app')).appendChild(el);
+    setTimeout(()=>el.remove(),1500);
+    this.renderDiscard&&this.renderDiscard();
+  },
+  showColorPicker(onPick){
+    const ov=document.createElement('div');ov.className='color-picker';
+    ov.innerHTML=`<div class="cp-panel"><div class="cp-title">Choose the new colour</div><div class="cp-row"></div></div>`;
+    const row=ov.querySelector('.cp-row');
+    UNO_COLORS.forEach(col=>{const b=document.createElement('div');b.className='cp-swatch';
+      b.style.background=this.cv(col);b.title=col;
+      b.onclick=()=>{ov.remove();onPick(col);};row.appendChild(b);});
+    document.getElementById('app').appendChild(ov);
+  },
+  showOfficerChooser(types,onPick,onCancel){
+    const ov=document.createElement('div');ov.className='officer-chooser';
+    ov.innerHTML=`<div class="oc-panel"><div class="oc-title">Recall which officer?</div><div class="oc-row"></div>
+      <div class="oc-cancel">Cancel</div></div>`;
+    const row=ov.querySelector('.oc-row');
+    types.forEach(t=>{const b=document.createElement('div');b.className='oc-pick';
+      b.innerHTML=`<div class="oc-ico">${GLYPHS[UNIT_DEFS[t].glyph]}</div><div class="oc-name">${UNIT_DEFS[t].name}</div>`;
+      b.onclick=()=>{ov.remove();onPick(t);};row.appendChild(b);});
+    ov.querySelector('.oc-cancel').onclick=()=>{ov.remove();onCancel&&onCancel();};
+    document.getElementById('app').appendChild(ov);
+  },
+  /* ---- BOARD ORIENTATION ----
+     Two independent 180° rotations can apply to the *display* only:
+       swapFlip  : the Swap card physically flipped the data; we mirror it visually
+       viewFlip  : orient so the active player's home row sits at the BOTTOM (thumb side)
+     Net visual rotation = swapFlip XOR viewFlip. Data & movement are untouched. */
+  swapFlip:false, viewFlip:false,
+  applyOrientation(){
+    const rotated = this.swapFlip !== this.viewFlip; // XOR
+    this.boardEl.classList.toggle('flipped', rotated);
+    // timer ring + reveal stage stay upright; only the board grid rotates
+  },
+  setViewForActive(side, mySide, mode){
+    // VS AI: orient to the human (mySide). Local: orient to whoever's turn it is (side).
+    const viewer = (mode==='ai') ? mySide : side;
+    // viewer sees own home at bottom. Cyan home = rows 8-9 (already bottom in raw render),
+    // Amber home = rows 0-1 (top in raw render) -> needs 180° to bring Amber to bottom.
+    this.viewFlip = (viewer==='amber');
+    this.applyOrientation();
+  },
+  reveal(side,card,done){const def=CARD_DEFS[card.id];const stage=document.getElementById('revealStage');
+    const sideName=side==='cyan'?'CYAN':'AMBER';const col=side==='cyan'?'var(--cyan)':'var(--amber)';
+    stage.querySelectorAll('.reveal-card').forEach(e=>e.remove());
+    const el=document.createElement('div');el.className='reveal-card animate';
+    el.style.setProperty('--c',this.cv(card.color));el.style.setProperty('--cg',this.cvg(card.color));
+    el.innerHTML=`<div class="who" style="color:${col}">${sideName} PLAYS</div>
+      <div class="corner tl">${def.icon}</div><div class="corner br">${def.icon}</div>
+      <div class="rtype">${def.cat} · ${card.color}</div><div class="ricon">${def.icon}</div>
+      <div class="rname">${def.name}</div><div class="rdesc">${def.desc}</div>`;
+    stage.appendChild(el);stage.classList.add('show');Audio.card();
+    setTimeout(()=>{stage.classList.remove('show');setTimeout(()=>{el.remove();done&&done();},220);},REVEAL_MS);},
+  /* Opponent's play stays secret: show a face-down card, not its identity. */
+  revealHidden(side,done){const stage=document.getElementById('revealStage');
+    const sideName=side==='cyan'?'CYAN':'AMBER';const col=side==='cyan'?'var(--cyan)':'var(--amber)';
+    stage.querySelectorAll('.reveal-card').forEach(e=>e.remove());
+    const el=document.createElement('div');el.className='reveal-card animate facedown';
+    el.innerHTML=`<div class="who" style="color:${col}">${sideName} PLAYS</div>
+      <div class="fd-logo">M</div><div class="fd-tag">a card</div>`;
+    stage.appendChild(el);stage.classList.add('show');Audio.card();
+    const dur=Math.min(REVEAL_MS,1400);
+    setTimeout(()=>{stage.classList.remove('show');setTimeout(()=>{el.remove();done&&done();},220);},dur);},
+};
+
+/* ---------- NET (transport seam) ----------
+   Local: send()->apply() immediately. Online: serialize `action` over a
+   socket and call Net.apply() on the remote device. Actions are plain data. */
+const Net={mode:'local',
+  send(action){this._recv(action);},      // -> socket.emit('action',action)
+  _recv(action){this.apply(action);},      // socket.on('action',a=>Net.apply(a))
+  apply(action){Game.applyAction(action);},
+};
+
+/* ---------- ROOM ---------- */
+const Room={
+  code:'',picks:{cyan:null,amber:null},mySide:null,mode:'local',
+  open(mode){this.mode=mode;this.picks={cyan:null,amber:null};this.mySide=null;this.code=this.genCode();
+    document.getElementById('menuMain').style.display='none';
+    const r=document.getElementById('menuRoom');r.style.display='flex';
+    document.getElementById('roomCode').textContent=this.code;
+    document.getElementById('roomSub').textContent=mode==='ai'?'VS AI · Pick Your Side':'Multiplayer Room';
+    document.getElementById('roomHint').textContent=mode==='ai'?'Choose your side. The AI takes the other.':'Both players choose a side. Picking one locks it for the other.';
+    document.getElementById('sideCyanIcon').innerHTML=GLYPHS.crown;document.getElementById('sideAmberIcon').innerHTML=GLYPHS.crown;
+    this.renderSides();document.getElementById('roomWaiting').innerHTML='';},
+  genCode(){const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<4;i++)s+=a[Math.random()*a.length|0];return s;},
+  renderSides(){const cy=document.getElementById('sideCyan'),am=document.getElementById('sideAmber');
+    const cyStat=document.getElementById('sideCyanStat'),amStat=document.getElementById('sideAmberStat');
+    [cy,am].forEach(e=>e.classList.remove('taken','picked'));
+    if(this.picks.cyan){cy.classList.add(this.mySide==='cyan'?'picked':'taken');cyStat.textContent=this.picks.cyan==='me'?'You':(this.mode==='ai'?'AI':'Player 1');}else cyStat.textContent='Open';
+    if(this.picks.amber){am.classList.add(this.mySide==='amber'?'picked':'taken');amStat.textContent=this.picks.amber==='me'?'You':(this.mode==='ai'?'AI':'Player 2');}else amStat.textContent='Open';
+    if(this.picks.cyan&&this.mySide!=='cyan')cy.classList.add('taken');if(this.picks.amber&&this.mySide!=='amber')am.classList.add('taken');},
+  pick(side){if(this.picks[side])return;this.mySide=side;this.picks[side]='me';Audio.card();
+    const other=side==='cyan'?'amber':'cyan';
+    if(this.mode==='ai'){this.picks[other]='ai';this.renderSides();
+      document.getElementById('roomWaiting').innerHTML='<span style="color:var(--cyan)">Starting match…</span>';setTimeout(()=>this.launch('ai'),700);}
+    else{this.picks[other]='p2';this.renderSides();
+      document.getElementById('roomWaiting').innerHTML=`<span style="color:var(--amber)">${other.toUpperCase()} locked for Player 2 — pass-and-play ready</span>`;setTimeout(()=>this.launch('local'),800);}},
+  launch(mode){document.getElementById('menuRoom').style.display='none';
+    Game.start({mode,mySide:this.mySide,aiSide:mode==='ai'?(this.mySide==='cyan'?'amber':'cyan'):null});},
+  back(){document.getElementById('menuRoom').style.display='none';document.getElementById('menuMain').style.display='flex';}
+};
+
+/* ---------- TIMER (per-turn radial countdown) ---------- */
+const Timer={
+  ring:null,prog:null,dur:TURN_SECONDS*1000,remaining:0,raf:null,startTs:0,running:false,lowBuzzed:false,
+  LOW_AT:3000, // ms remaining when ring pulses
+  init(){this.ring=document.getElementById('timerRing');this.prog=document.getElementById('timerProgress');},
+  // interpolate green (full) -> yellow (mid) -> red (empty) by fraction f (1..0)
+  colorFor(f){
+    f=Math.max(0,Math.min(1,f));
+    let r,g,b;
+    if(f>0.5){ // green -> yellow over [1..0.5]
+      const t=(1-f)/0.5; r=Math.round(60+ (255-60)*t); g=Math.round(255- (255-210)*t); b=Math.round(122- (122-50)*t);
+    }else{ // yellow -> red over [0.5..0]
+      const t=(0.5-f)/0.5; r=255; g=Math.round(210-210*t); b=Math.round(50-50*t);
+    }
+    return `rgb(${r},${g},${b})`;
+  },
+  start(side){
+    this.stop();
+    this.ring.classList.remove('hidden','low');
+    this.remaining=this.dur;this.startTs=performance.now();this.running=true;this.lowBuzzed=false;
+    this.prog.style.transition='none';this.prog.style.strokeDashoffset='0';
+    this.ring.style.setProperty('--tcol',this.colorFor(1));
+    void this.prog.getBoundingClientRect();
+    this.prog.style.transition='stroke-dashoffset .2s linear, stroke .3s, filter .3s';
+    this.loop();
+  },
+  loop(){
+    this.raf=requestAnimationFrame(()=>{
+      if(!this.running)return;
+      const el=performance.now()-this.startTs;
+      this.remaining=Math.max(0,this.dur-el);
+      const frac=this.remaining/this.dur; // 1 -> 0
+      this.prog.style.strokeDashoffset=String(Math.round((1-frac)*1000));
+      this.ring.style.setProperty('--tcol',this.colorFor(frac)); // green→red fade
+      if(this.remaining<=this.LOW_AT){this.ring.classList.add('low');
+        if(!this.lowBuzzed){this.lowBuzzed=true;Audio.tick();}}
+      if(this.remaining<=0){this.running=false;this.onExpire&&this.onExpire();return;}
+      this.loop();
+    });
+  },
+  stop(){this.running=false;if(this.raf)cancelAnimationFrame(this.raf);this.ring&&this.ring.classList.remove('low');},
+  hide(){this.stop();this.ring&&this.ring.classList.add('hidden');},
+};
+
+/* ---------- GAME CLOCK (per-side total time; reaching 0 = loss) ---------- */
+const GameClock={
+  rem:GAME_SECONDS, running:false, raf:null, lastTs:0, onFlag:null,
+  reset(){this.rem=GAME_SECONDS;this.running=false;this.stop();this.render();},
+  fmt(s){s=Math.max(0,Math.ceil(s));const m=Math.floor(s/60),ss=s%60;return m+':'+String(ss).padStart(2,'0');},
+  render(){
+    const el=document.getElementById('gcSharedTime');if(el)el.textContent=this.fmt(this.rem);
+    const box=document.getElementById('gcShared');if(box)box.classList.toggle('low',this.rem<=30);
+  },
+  // single shared clock: runs continuously through the whole match
+  startFor(){if(this.running)return;this.running=true;this.lastTs=performance.now();this.render();this.loop();},
+  loop(){this.raf=requestAnimationFrame(()=>{
+    if(!this.running)return;
+    const now=performance.now();const dt=(now-this.lastTs)/1000;this.lastTs=now;
+    this.rem-=dt;
+    if(this.rem<=0){this.rem=0;this.render();this.running=false;this.onFlag&&this.onFlag();return;}
+    this.render();this.loop();
+  });},
+  stop(){this.running=false;if(this.raf)cancelAnimationFrame(this.raf);this.raf=null;},
+};
+
+
+const Game={
+  mode:'local',mySide:'cyan',aiSide:null,active:'cyan',
+  selCardUid:null,selUnit:null,moves:[],attacks:[],
+  pendingPower:null,over:false,busy:false,turnCount:0,suddenAnnounced:false,_skip:null,_drewThisTurn:false,
+  start({mode,mySide,aiSide,tutorial}){this.mode=mode;this.mySide=mySide;this.aiSide=aiSide;Net.mode=mode;
+    this.over=false;this.busy=false;this.turnCount=0;this.suddenAnnounced=false;this._skip=null;this.resetSel();
+    this.tutorialMode=!!tutorial;
+    AI.diff=this.tutorialMode?'easy':'normal';
+    UI.swapFlip=false;UI.viewFlip=false; // reset orientation
+    Board.init();Units.reset();Cards.build();UI.initBoard();
+    if(this.tutorialMode)this.deployTutorial(); else this.deploy();
+    UI.setViewForActive('cyan',mySide,mode); // orient before first render
+    UI.renderBoard();
+    if(this.tutorialMode){
+      // Fully scripted, deterministic teaching scenario — exact cards, exact pieces,
+      // exact moves. The opponent is a single stationary Commander so the guided
+      // path to victory is guaranteed, never left to chance.
+      Cards.top={color:'red',type:'v2',kind:'move',id:'m2'};
+      Cards.hands.cyan=[
+        {uid:'tut_m2',id:'m2',color:'red'},   // step: move the Soldier forward
+        {uid:'tut_skip',id:'skip',color:'red'}, // step: power card demo
+        {uid:'tut_m4',id:'m4',color:'red'},   // step: finishing Guardian capture
+      ];
+      Cards.hands.amber=[]; // the opponent never acts in the tutorial — see beginTurn()
+      document.getElementById('gameClocks').style.display='none';
+    }else{
+      for(let i=0;i<START_HAND;i++){Cards.draw('cyan');Cards.draw('amber');}
+      document.getElementById('gameClocks').style.display='flex';
+    }
+    Timer.init();Timer.onExpire=()=>this.onTimeout();
+    GameClock.reset();GameClock.onFlag=()=>{ // shared game clock hit zero
+      const cyN=Units.ofOwner('cyan').length, amN=Units.ofOwner('amber').length;
+      if(cyN===amN){this.endGame(null,'time');} // draw
+      else{const winner=cyN>amN?'cyan':'amber';UI.toast("Time's up!",'warn');this.endGame(winner,'time');}
+    };
+    document.getElementById('quitBtn').style.display=this.tutorialMode?'none':'flex';
+    this.active='cyan';this.beginTurn('cyan');
+    if(this.tutorialMode)Tutorial.beginGuide();},
+  deploy(){const back=['cannon','raider','commander','phantom','guardian'];
+    for(let c=0;c<COLS;c++){Units.create(back[c],'amber',0,c);Units.create('soldier','amber',1,c);
+      Units.create('soldier','cyan',8,c);Units.create(back[c],'cyan',9,c);}},
+  /* Minimal teaching scenario: just enough pieces to demonstrate movement, capture,
+     a power card, and a clean finish — fully scripted by the Tutorial guide. */
+  deployTutorial(){
+    Units.create('commander','cyan',9,2);
+    Units.create('soldier','cyan',8,3);
+    Units.create('guardian','cyan',5,2);
+    Units.create('commander','amber',1,2);
+  },
+  /* Tutorial-only: the opponent never really moves (a fixed teaching position).
+     Triggered ONLY by the guide's Next button — never automatically. */
+  tutorialPassOpponent(){
+    if(!this.tutorialMode||this.over)return;
+    UI.toast('Opponent has no response — turn passes','idle');
+    this.busy=true;this.nextTurn();
+  },
+  isHumanTurn(){return !(this.mode==='ai'&&this.active===this.aiSide);},
+
+  beginTurn(side){this.active=side;this.turnCount++;this.resetSel();UI.clearHi();this._drewThisTurn=false;
+    this._turnToken=(this._turnToken||0)+1; // new turn → reset the hand-off guard
+    this._armWatchdog(); // safety net: force-advance if this turn ever stalls
+    UI.setViewForActive(side,this.mySide,this.mode); // active player's pieces face the bottom (thumb side)
+    UI.renderHand(side);UI.renderBoard();
+
+    if(this.tutorialMode){
+      // No timer, no game clock, no deadlock logic — this is a fixed teaching scenario.
+      Timer.hide();
+      if(side===this.aiSide){
+        // The opponent NEVER acts automatically — only when the guide's Next button
+        // explicitly triggers Game.tutorialPassOpponent(). We just sit here and wait.
+        UI.setTurn(side,'OPPONENT TURN');this.busy=false;return;
+      }
+      UI.setTurn(side);this.busy=false;
+      return; // the Tutorial guide drives everything else via its scripted steps
+    }
+
+    GameClock.startFor(side); // this side's shared game clock now ticks
+    // DEADLOCK AUTO-RESOLVE: a true deadlock = neither side can play AND no draw can
+    // help (both hands full OR deck empty). Wild Color cards normally prevent this,
+    // but as a safety net we auto-shift the match color so play always continues.
+    if(Cards.isHardDeadlock()){
+      const nc=Cards.shiftColor(); if(nc){UI.colorShift(nc);UI.renderHand(side);}
+    } else if(Cards.isDeadlocked()){
+      this._deadlockPasses=(this._deadlockPasses||0)+1;
+      if(this._deadlockPasses>=2){ // neither could play for a full round → auto-break
+        const nc=Cards.shiftColor(); if(nc){UI.colorShift(nc);UI.renderHand(side);this._deadlockPasses=0;}
+      }
+    } else { this._deadlockPasses=0; }
+    if(this.turnCount>=SUDDEN_DEATH_TURN&&!this.suddenAnnounced){this.suddenAnnounced=true;UI.toast('⚡ Sudden Death active');}
+    if(this.mode==='ai'&&side===this.aiSide){UI.setTurn(side,'AI THINKING…');UI.setHint('Opponent is planning…','amber');this.busy=true;UI.drawPulse(false);Timer.hide();setTimeout(()=>AI.takeTurn(),750);return;}
+    UI.setTurn(side);this.busy=false;
+    Timer.start(side); // per-turn countdown begins
+    // UNO rule: must play a card matching the MATCH pile (color or type), or a Wild. If none, must draw.
+    if(!Cards.hasPlayable(side)){
+      UI.setHint(`No match — tap the DRAW stack`, 'warn');UI.drawPulse(true);
+    }else{
+      const who=this.mode==='local'?(side==='cyan'?'Cyan, ':'Amber, '):'';
+      UI.setHint(`${who}play a card matching ${Cards.top.color}/${CARD_DEFS[Cards.top.id].name}`, side==='amber'&&this.mode==='local'?'amber':'idle');
+      UI.drawPulse(false);
+    }
+  },
+  /* WATCHDOG: the ultimate anti-freeze. Each turn arms a timer well beyond the
+     longest legitimate turn (timer + reveal + animation). If the turn hasn't
+     handed off by then, we force it to advance. A dropped callback can delay the
+     game by a few seconds at worst — it can never freeze it permanently. */
+  _armWatchdog(){
+    if(this._wd)clearTimeout(this._wd);
+    const myToken=this._turnToken;
+    const isAI=(this.mode==='ai'&&this.active===this.aiSide);
+    const budget = isAI ? 6000 : (TURN_SECONDS*1000 + REVEAL_MS + 4000); // generous ceiling
+    this._wd=setTimeout(()=>{
+      // still the same turn AND not yet handed off? force it.
+      if(this.over)return;
+      if(this._turnToken!==myToken)return;        // turn already moved on — fine
+      if(this._handedOff===myToken)return;         // hand-off in flight — fine
+      // Force-resolve: clear transient UI/state and pass the turn.
+      try{Timer.stop();}catch(e){}
+      this.busy=false;this.resetSel();
+      try{UI.clearHi();UI.renderBoard();}catch(e){}
+      UI.toast('Turn auto-advanced','warn');
+      this.nextTurn();
+    }, budget);
+  },
+  nextTurn(){
+    // Guard: a given turn may only hand off once. Stale callbacks (late animation
+    // onfinish, a timeout that fired during busy, etc.) are ignored.
+    if(this.over)return;
+    if(this._handedOff===this._turnToken){return;} // already transitioned this turn
+    this._handedOff=this._turnToken;
+    if(this._wd){clearTimeout(this._wd);this._wd=null;} // disarm watchdog for this turn
+    const nxt=this.active==='cyan'?'amber':'cyan';
+    if(this._skip===nxt){this._skip=null;UI.toast(`${nxt.toUpperCase()} turn skipped!`,'amber-act');
+      setTimeout(()=>this.beginTurn(this.active),900);return;}
+    setTimeout(()=>this.beginTurn(nxt),300);},
+
+  /* draw stack tapped */
+  onDraw(){if(this.over||this.busy||!this.isHumanTurn())return;
+    if(this.tutorialMode)return; // tutorial hands are curated — drawing is never needed or allowed
+    if(this._drewThisTurn){UI.toast('Already drew this turn');return;}
+    Timer.stop();
+    const before=Cards.hands[this.active].length;
+    const got=Cards.draw(this.active);
+    if(got==='full'){UI.toast('Hand is full (7)','warn');Timer.start(this.active);return;}
+    if(!got){UI.toast('Deck empty');Timer.start(this.active);return;}
+    Audio.draw();this._drewThisTurn=true;UI.renderHand(this.active);
+    if(Cards.playable(got)){UI.setHint('Drew a playable card — play it',this.active==='amber'?'amber':'idle');UI.drawPulse(false);Timer.start(this.active);
+    }else{
+      UI.toast('Drew — still no match, turn passes','warn');UI.drawPulse(false);this.busy=true;setTimeout(()=>this.nextTurn(),900);
+    }
+  },
+
+  onCardTap(uid){if(this.over||this.busy||!this.isHumanTurn())return;
+    if(!Tutorial.allow('card',{uid})){if(Tutorial.active)Tutorial.nudge();return;}
+    const hand=Cards.hands[this.active];const c=hand.find(x=>x.uid===uid);if(!c)return;
+    if(!Cards.playable(c)){Audio.nope();UI.toast(`Must match ${Cards.top.color} or ${CARD_DEFS[Cards.top.id].name}`,'warn');return;}
+    if(this.selCardUid===uid){this.resetSel();UI.renderBoard();UI.renderHand(this.active);this.setReady();if(!this.tutorialMode)Timer.start(this.active);return;}
+    if(!this.tutorialMode)Timer.stop(); // card committed — clock stops, the follow-up tap is quick
+    this.resetSel();this.selCardUid=uid;UI.renderHand(this.active);
+    Tutorial.notify('card');
+    const def=CARD_DEFS[c.id];this.busy=true;
+    UI.reveal(this.active,c,()=>{this.busy=false;
+      if(def.kind==='move'){UI.setHint(`${def.name}: tap one of your units`,this.active==='amber'?'amber':'');this.highlightOwn();}
+      else this.beginPower(c.id);});
+  },
+
+  /* timer expired: auto-resolve so the game stays fast. Draw if possible, else pass. */
+  onTimeout(){
+    if(this.over||!this.isHumanTurn())return;
+    if(this.busy)return; // an action is mid-resolution; it will hand off itself
+    if(this._handedOff===this._turnToken)return; // turn already advancing
+    const tok=this._turnToken; // lock to THIS turn
+    Audio.timeout();Timer.hide();UI.toast(`${this.active.toUpperCase()} ran out of time!`,'warn');
+    this.resetSel();UI.clearHi();UI.renderHand(this.active);
+    this.busy=true;
+    setTimeout(()=>{
+      if(this.over||this._turnToken!==tok||this._handedOff===tok)return; // turn changed since timeout — abort
+      if(!this._drewThisTurn){const g=Cards.draw(this.active);if(g)UI.renderHand(this.active);}
+      this.nextTurn();
+    },700);
+  },
+  setReady(){if(!Cards.hasPlayable(this.active)){UI.setHint('No match — tap DRAW','warn');UI.drawPulse(true);return;}
+    const who=this.mode==='local'?(this.active==='cyan'?'Cyan, ':'Amber, '):'';
+    UI.setHint(`${who}play a card matching ${Cards.top.color}/${CARD_DEFS[Cards.top.id].name}`,this.active==='amber'&&this.mode==='local'?'amber':'idle');},
+  highlightOwn(){UI.clearHi();
+    if(Tutorial.active){const s=Tutorial.current();
+      if(s&&s.awaiting==='unit'){UI.tile(s.forceUnitPos.r,s.forceUnitPos.c).classList.add('selectable','tut-target');}
+      return;
+    }
+    Units.ofOwner(this.active).forEach(u=>UI.tile(u.r,u.c).classList.add('selectable'));},
+
+  beginPower(pid){this.pendingPower=pid;
+    if(pid==='skip'||pid==='swap'){Net.send({t:'power',side:this.active,uid:this.selCardUid,pid});return;}
+    if(pid==='wild'){ // human picks the new color, then turn ends
+      UI.showColorPicker((col)=>{Net.send({t:'power',side:this.active,uid:this.selCardUid,pid:'wild',color:col});});
+      return;
+    }
+    if(pid==='recall'){const slots=this.recallSlots(this.active);
+      if(!slots.length){UI.toast(this.deadSoldiers(this.active)?'No empty Soldier tile':'No fallen Soldiers to recall');this.resetSel();UI.renderHand(this.active);this.setReady();return;}
+      UI.setHint('Recall: tap a glowing Soldier tile','power');UI.clearHi();slots.forEach(s=>UI.tile(s.r,s.c).classList.add('movable'));}
+    else if(pid==='officer'){
+      const dead=this.deadOfficers(this.active);const slots=this.officerSlots(this.active);
+      if(!dead.length){UI.toast('No fallen officers to recall');this.resetSel();UI.renderHand(this.active);this.setReady();return;}
+      if(!slots.length){UI.toast('No empty back-row tile');this.resetSel();UI.renderHand(this.active);this.setReady();return;}
+      // show chooser of which dead officer to revive
+      UI.showOfficerChooser(dead,(type)=>{
+        this.officerType=type;
+        UI.setHint(`Recall ${UNIT_DEFS[type].name}: tap a glowing back-row tile`,'power');
+        UI.clearHi();this.officerSlots(this.active).forEach(s=>UI.tile(s.r,s.c).classList.add('movable'));
+      },()=>{ // cancelled
+        this.resetSel();UI.renderHand(this.active);this.setReady();
+      });}
+  },
+
+  onTileTap(r,c){if(this.over||this.busy||!this.isHumanTurn())return;const id=Board.at(r,c);
+    if(this.pendingPower)return this.powerTap(r,c,id);
+    if(!this.selCardUid)return;
+    const def=CARD_DEFS[Cards.hands[this.active].find(x=>x.uid===this.selCardUid).id];if(def.kind!=='move')return;
+    if(id){const u=Units.get(id);if(u.owner===this.active){
+      if(!Tutorial.allow('unit',{r,c})){if(Tutorial.active)Tutorial.nudge();return;}
+      this.selectUnit(u,def.val);Tutorial.notify('unit');return;}}
+    if(this.selUnit){const a=this.attacks.find(x=>x.r===r&&x.c===c);const m=this.moves.find(x=>x.r===r&&x.c===c);
+      if(a){if(!Tutorial.allow('tile',{r,c})){if(Tutorial.active)Tutorial.nudge();return;}Tutorial.notify('tile');return Net.send({t:'move',side:this.active,uid:this.selCardUid,from:{r:this.selUnit.r,c:this.selUnit.c},to:{r,c},target:a.target});}
+      if(m){if(!Tutorial.allow('tile',{r,c})){if(Tutorial.active)Tutorial.nudge();return;}Tutorial.notify('tile');return Net.send({t:'move',side:this.active,uid:this.selCardUid,from:{r:this.selUnit.r,c:this.selUnit.c},to:{r,c},target:null});}}
+  },
+  selectUnit(u,val){let v=val;this.selUnit=u;
+    let{moves,attacks}=Movement.compute(u,v);
+    if(Tutorial.active){const s=Tutorial.current();
+      if(s&&s.awaiting==='tile'){const f=s.forceTilePos;
+        moves=moves.filter(m=>m.r===f.r&&m.c===f.c);
+        attacks=attacks.filter(a=>a.r===f.r&&a.c===f.c);
+      }
+    }
+    this.moves=moves;this.attacks=attacks;
+    UI.renderBoard();UI.highlight(moves,attacks,{r:u.r,c:u.c});
+    if(Tutorial.active){const t=document.querySelector('.tile.movable,.tile.attackable');if(t)t.classList.add('tut-target');}
+    if(!moves.length&&!attacks.length){UI.setHint(`${u.def.name} is boxed in — pick another`,this.active==='amber'?'amber':'');this.highlightOwn();}
+    else UI.setHint(`${u.def.name}: green moves${attacks.length?', red strikes':''}`,this.active==='amber'?'amber':'');},
+  powerTap(r,c,id){const pid=this.pendingPower;
+    if(pid==='recall'){if(!id&&this.recallSlots(this.active).some(s=>s.r===r&&s.c===c))return Net.send({t:'power',side:this.active,uid:this.selCardUid,pid,r,c});UI.toast('Tap a glowing Soldier tile');return;}
+    if(pid==='officer'){if(!this.officerType){UI.toast('Choose an officer first');return;}
+      if(!id&&this.officerSlots(this.active).some(s=>s.r===r&&s.c===c))return Net.send({t:'power',side:this.active,uid:this.selCardUid,pid,r,c,otype:this.officerType});UI.toast('Tap a glowing back-row tile');return;}},
+
+  applyAction(a){if(a.t==='move')this.execMove(a);else if(a.t==='power')this.execPower(a);},
+  execMove(a){Cards.play(a.side,a.uid);
+    const fromId=Board.at(a.from.r,a.from.c);
+    const u=fromId?Units.get(fromId):this.selUnit;
+    if(!u){ // defensive: the unit vanished (shouldn't happen) — don't freeze, just advance
+      this.resetSel();UI.renderBoard();UI.renderHand(a.side);this.nextTurn();return;}
+    this.busy=true;UI.clearHi();
+    const from=UI.tile(a.from.r,a.from.c),to=UI.tile(a.to.r,a.to.c);const el=from.querySelector('.unit');
+    let done=false;
+    const finish=()=>{
+      if(done)return; done=true; // run exactly once
+      if(a.target&&Units.get(a.target)&&Units.get(a.target).alive){Combat.resolve(a.target);}
+      Board.clear(a.from.r,a.from.c);u.r=a.to.r;u.c=a.to.c;Board.set(a.to.r,a.to.c,u.id);
+      this.resetSel();UI.renderBoard();UI.renderHand(a.side);
+      const foe=a.side==='cyan'?'amber':'cyan';
+      if(!Units.commander(foe))return this.endGame(a.side);
+      this.nextTurn();};
+    if(el){const fr=from.getBoundingClientRect(),tr=to.getBoundingClientRect();el.style.zIndex=10;
+      const base=(UI.swapFlip!==UI.viewFlip)?'rotate(180deg) ':'';
+      try{
+        const anim=el.animate([{transform:base+'translate(0,0)'},{transform:base+`translate(${tr.left-fr.left}px,${tr.top-fr.top}px)`}],
+          {duration:260,easing:'cubic-bezier(.34,1.3,.64,1)'});
+        anim.onfinish=()=>{Audio.move();finish();};
+        anim.oncancel=()=>{finish();};
+      }catch(e){finish();}
+      // Fallback: guarantee resolution even if onfinish/oncancel never fire (e.g. element re-rendered)
+      setTimeout(()=>{if(!done){Audio.move();finish();}},420);
+    }else{Audio.move();finish();}},
+  execPower(a){Cards.play(a.side,a.uid);const pid=a.pid;Audio.power();
+    if(pid==='skip'){this._skip=a.side==='cyan'?'amber':'cyan';UI.toast(`${this._skip.toUpperCase()} will skip`,'power-act');this.afterPower(a.side,true);}
+    else if(pid==='wild'){ // set the match pile to the chosen color; turn ends (acts as skip-to-next)
+      const col=UNO_COLORS.includes(a.color)?a.color:Cards.randColor();
+      Cards.top.color=col; Cards.top.type='wild';
+      UI.colorShift(col); UI.renderDiscard();
+      this.afterPower(a.side,true);}
+    else if(pid==='swap'){this.busy=true;UI.toast('Board flip!','power-act');Audio.flip();UI.swapFlip=!UI.swapFlip;UI.applyOrientation();Board.flip();setTimeout(()=>{UI.renderBoard();this.afterPower(a.side,true);},760);return;}
+    else if(pid==='recall'){Units.create('soldier',a.side,a.r,a.c);UI.toast('Soldier recalled','power-act');UI.renderBoard();this.afterPower(a.side,true);}
+    else if(pid==='officer'){const t=a.otype&&OFFICER_TYPES.includes(a.otype)?a.otype:'guardian';Units.create(t,a.side,a.r,a.c);UI.toast(`${UNIT_DEFS[t].name} recalled`,'power-act');UI.renderBoard();this.afterPower(a.side,true);}},
+  afterPower(side,endsTurn){this.resetSel();UI.renderHand(side);if(endsTurn){this.busy=true;this.nextTurn();}else this.busy=false;},
+  // empty tiles on the SOLDIER row (for Recall), respecting Swap data-flip
+  recallSlots(side){if(!this.deadSoldiers(side))return [];
+    let r=SOLDIER_ROW[side];if(Board.flipped)r=ROWS-1-r;const slots=[];
+    for(let c=0;c<COLS;c++)if(!Board.at(r,c))slots.push({r,c});return slots;},
+  // empty tiles on the OFFICER/back row (for Recall Officer)
+  officerSlots(side){let r=OFFICER_ROW[side];if(Board.flipped)r=ROWS-1-r;const slots=[];
+    for(let c=0;c<COLS;c++)if(!Board.at(r,c))slots.push({r,c});return slots;},
+  deadSoldiers(side){return Object.values(Units.map).filter(u=>u.owner===side&&u.type==='soldier'&&!u.alive).length;},
+  deadOfficers(side){ // list of distinct officer types that are dead and not currently on the board
+    const alive=new Set(Units.ofOwner(side).map(u=>u.type));
+    const everDead=new Set(Object.values(Units.map).filter(u=>u.owner===side&&!u.alive&&OFFICER_TYPES.includes(u.type)).map(u=>u.type));
+    return [...everDead].filter(t=>!alive.has(t));},
+  resetSel(){this.selCardUid=null;this.selUnit=null;this.moves=[];this.attacks=[];this.pendingPower=null;this.officerType=null;},
+
+  endGame(winner,reason){this.over=true;this.busy=true;Timer.hide();GameClock.stop();if(this._wd){clearTimeout(this._wd);this._wd=null;}document.getElementById('quitBtn').style.display='none';this._endReason=reason||'commander';
+    if(Tutorial.active)Tutorial.endGuide(); // close any lingering guide UI
+    setTimeout(()=>{(this.mode==='ai'?(winner===this.mySide?Audio.win():Audio.lose()):Audio.win());
+      if(this.tutorialMode&&winner===this.mySide)Tutorial.showWinBanner();
+      this.showEnd(winner);},500);},
+  quitToMenu(){this.over=true;this.busy=true;Timer.hide();GameClock.stop();if(this._wd){clearTimeout(this._wd);this._wd=null;}
+    document.getElementById('quitBtn').style.display='none';
+    document.getElementById('quitConfirm').style.display='none';
+    // clear any end overlay if present
+    document.querySelectorAll('.overlay.win').forEach(o=>o.remove());
+    document.getElementById('menuMain').style.display='flex';},
+  showEnd(winner){const ov=document.createElement('div');ov.className='overlay win';
+    let title, sub, tag;
+    if(!winner){ // draw (clock ran out with equal pieces)
+      title='DRAW'; sub="Time's up — forces are even";
+      tag='A dead heat. Rematch?';
+    }else if(this.tutorialMode){
+      title=winner===this.mySide?'TUTORIAL COMPLETE!':'NICE TRY!';
+      sub=winner===this.mySide?'You captured the enemy Commander':'The AI got lucky — ready for a real match?';
+      tag=winner===this.mySide?'You now know how to play MoveBound. Time for a real match!':'You\'ve learned the basics — jump into VS AI or Local Multiplayer whenever you\'re ready.';
+    }else{
+      title=this.mode==='ai'?(winner===this.mySide?'VICTORY':'DEFEAT'):`${winner.toUpperCase()} WINS`;
+      sub=this._endReason==='time'?"Time's up — most pieces standing wins":'Enemy Commander Eliminated';
+      tag=this.mode==='ai'?(winner===this.mySide?'Flawless tactics. The line is broken.':'Regroup and adapt — the board always offers another path.'):`${winner==='cyan'?'Cyan':'Amber'} commands the field.`;
+    }
+    ov.innerHTML=`<div class="sub">${sub}</div><h1>${title}</h1>
+      <div class="tagline">${tag}</div>
+      <div class="menu-btns"><button class="big-btn" id="againBtn">Play Again ▸</button><button class="big-btn ghost" id="menuBtn">Main Menu</button></div>`;
+    document.getElementById('app').appendChild(ov);
+    document.getElementById('againBtn').onclick=()=>{ov.remove();Room.open(this.tutorialMode?'ai':(this.mode==='ai'?'ai':'local'));};
+    document.getElementById('menuBtn').onclick=()=>{ov.remove();document.getElementById('menuMain').style.display='flex';};}
+};
+
+/* ---------- COMBAT ---------- */
+const Combat={resolve(targetId){const t=Units.get(targetId);
+  UI.float(t.r,t.c,'✕');const el=UI.tile(t.r,t.c).querySelector('.unit');if(el)el.classList.add('dying');
+  Units.kill(t);Audio.kill();UI.shake();return true;}};
+
+/* ---------- AI ---------- */
+const AI={
+  diff:'normal', // 'easy' | 'normal' — easy is used for the guided tutorial
+  takeTurn(){if(Game.over)return;const side=Game.aiSide;
+    // UNO rule: AI must play a card matching the pile. If none, draw once and re-check.
+    if(!Cards.hasPlayable(side)){
+      const got=Cards.draw(side);UI.renderHand(side);Audio.draw();
+      if(!got||!Cards.hasPlayable(side)){UI.toast('Opponent draws — no match, passes');Game.busy=true;setTimeout(()=>Game.nextTurn(),800);return;}
+    }
+    // At this point the AI HAS at least one legal card. It will always play one.
+    const act=this.decide(side);
+    if(!act){ // ultimate safety net: nothing actionable — draw if we can, then pass. Never freeze.
+      if(!Game._aiDrew){Game._aiDrew=true;const g=Cards.draw(side);if(g){UI.renderHand(side);Audio.draw();return setTimeout(()=>AI.takeTurn(),300);}}
+      Game._aiDrew=false;UI.toast('Opponent passes');Game.busy=true;return setTimeout(()=>Game.nextTurn(),700);
+    }
+    Game._aiDrew=false;
+    Game.busy=true;
+    // The PLAYED card is public — it lands on the match pile, so reveal it face-up.
+    // (The opponent's HELD hand stays face-down; only this one played card is shown.)
+    const playedCard=Cards.hands[side].find(c=>c.uid===act.uid);
+    if(!playedCard){ // action referenced a card not in hand — bail safely instead of crashing
+      Game.busy=true;return setTimeout(()=>Game.nextTurn(),300);
+    }
+    UI.reveal(side,playedCard,()=>Net.send(act));
+  },
+
+  /* Always returns a legal action (never null when a playable card exists). */
+  decide(side){
+    const easy=this.diff==='easy';
+    const tutorialMercy = Game.tutorialMode===true; // AI may never capture the human's Commander
+    const legal=Cards.hands[side].filter(c=>Cards.playable(c));
+    const moveCards=legal.filter(c=>CARD_DEFS[c.id].kind==='move');
+    const powerCards=legal.filter(c=>CARD_DEFS[c.id].kind==='power');
+    const mine=Units.ofOwner(side);const foe=side==='cyan'?'amber':'cyan';const enemyCmd=Units.commander(foe);
+    let best=null,bs=-1e9;
+    const noise=easy?70:12; // huge randomness on easy = weak, erratic play
+    // Evaluate every legal move card against every unit
+    for(const card of moveCards){const val=CARD_DEFS[card.id].val;
+      for(const u of mine){const{moves,attacks}=Movement.compute(u,val);
+        for(const a of attacks){const tgt=Units.get(a.target);
+          // MERCY RULE (tutorial only): never let the AI capture the human Commander —
+          // the new player must be free to learn without an unlucky early loss.
+          if(tutorialMercy && tgt.type==='commander' && tgt.owner===Game.mySide) continue;
+          let s=tgt.type==='commander'?99999:tgt.type==='guardian'?320:['cannon','phantom','raider'].includes(tgt.type)?240:160;
+          if(easy)s*=0.35; // captures matter far less to a weak AI — it often won't bother
+          s+=Math.random()*noise;
+          if(s>bs){bs=s;best={t:'move',side,uid:card.uid,from:{r:u.r,c:u.c},to:{r:a.r,c:a.c},target:a.target};}}
+        for(const m of moves){let s=10;
+          if(enemyCmd){const d=Math.abs(m.r-enemyCmd.r)+Math.abs(m.c-enemyCmd.c);s+=(14-d)*(easy?0.3:1);} // a weak AI barely strategizes toward the enemy commander
+          // reward forward progress for soldiers, mobility for flankers
+          if(u.type==='raider'||u.type==='phantom')s+=5;
+          if(u.type==='soldier'){const f=FORWARD[side]*(Board.flipped?-1:1);s+=(m.r-u.r)*f*2;}
+          if(u.type==='commander')s-=18; // keep commander cautious
+          s+=Math.random()*(easy?30:5); // a weak AI wanders rather than optimizing position
+          if(s>bs){bs=s;best={t:'move',side,uid:card.uid,from:{r:u.r,c:u.c},to:{r:m.r,c:m.c},target:null};}}}}
+    // If a board move was found, decide whether a power card is clearly better/needed
+    const bestIsCapture = best && best.target;
+    if(powerCards.length){
+      const myCmd=Units.commander(side);
+      const sk=powerCards.find(c=>c.id==='skip');
+      const sw=powerCards.find(c=>c.id==='swap');
+      const re=powerCards.find(c=>c.id==='recall');
+      const off=powerCards.find(c=>c.id==='officer');
+      const myCount=mine.length, foeCount=Units.ofOwner(foe).length;
+      const downMaterial = myCount < foeCount;
+      // Recall Officer: prioritize when we've lost a strong officer (esp. if down material)
+      if(off){const deadOff=Game.deadOfficers(side);const oslots=Game.officerSlots(side);
+        if(deadOff.length&&oslots.length&&!bestIsCapture){
+          const pref=['guardian','raider','phantom','cannon'].find(t=>deadOff.includes(t))||deadOff[0];
+          const chance = downMaterial?0.85:0.55;
+          if(Math.random()<chance) return{t:'power',side,uid:off.uid,pid:'officer',r:oslots[0].r,c:oslots[0].c,otype:pref};}}
+      // Recall soldier when we've lost soldiers (rebuild the front line)
+      if(re && Game.recallSlots(side).length){const dead=Game.deadSoldiers(side);
+        if(dead>0 && !bestIsCapture){const chance=downMaterial?0.6:0.4;
+          if(Math.random()<chance){const s=Game.recallSlots(side)[0];return{t:'power',side,uid:re.uid,pid:'recall',r:s.r,c:s.c};}}}
+      // Skip when no strong board move — denies the opponent a tempo
+      if(sk && bs<16 && Math.random()<.55)return{t:'power',side,uid:sk.uid,pid:'skip'};
+      // Swap to flip the board when behind on territory / position is bad
+      if(sw && (bs<6||downMaterial) && Math.random()<.35)return{t:'power',side,uid:sw.uid,pid:'swap'};
+    }
+    if(best)return best;
+    // Fallback: no useful board move — play ANY legal power card so the AI never stalls.
+    if(powerCards.length){
+      const off2=powerCards.find(c=>c.id==='officer');
+      if(off2){const d=Game.deadOfficers(side);const s=Game.officerSlots(side);
+        if(d.length&&s.length)return{t:'power',side,uid:off2.uid,pid:'officer',r:s[0].r,c:s[0].c,otype:d[0]};}
+      const re2=powerCards.find(c=>c.id==='recall');
+      if(re2){const slots=Game.recallSlots(side);if(slots.length)return{t:'power',side,uid:re2.uid,pid:'recall',r:slots[0].r,c:slots[0].c};}
+      const turnEnding=powerCards.find(c=>c.id==='skip'||c.id==='swap');
+      if(turnEnding)return{t:'power',side,uid:turnEnding.uid,pid:turnEnding.id};
+      // a recall with no valid slot remains — fall through to wild/move
+    }
+    // No board move and no other useful power → if we hold a Wild, play it and pick the
+    // color that makes the MOST of our remaining hand playable (next turn).
+    const wild=Cards.hands[side].find(c=>CARD_DEFS[c.id].type==='wild');
+    if(wild){
+      const rest=Cards.hands[side].filter(c=>c.uid!==wild.uid);
+      let bestCol=UNO_COLORS[0],bestN=-1;
+      for(const col of UNO_COLORS){const n=rest.filter(c=>c.color===col).length;if(n>bestN){bestN=n;bestCol=col;}}
+      return{t:'power',side,uid:wild.uid,pid:'wild',color:bestCol};
+    }
+    // Truly nothing actionable: play the first legal move card if any exists, else null
+    if(moveCards.length){const c=moveCards[0];
+      for(const u of mine){const{moves,attacks}=Movement.compute(u,CARD_DEFS[c.id].val);
+        const safeAttack=attacks.find(a=>!(tutorialMercy && Units.get(a.target).type==='commander' && Units.get(a.target).owner===Game.mySide));
+        if(safeAttack)return{t:'move',side,uid:c.uid,from:{r:u.r,c:u.c},to:{r:safeAttack.r,c:safeAttack.c},target:safeAttack.target};
+        if(moves.length)return{t:'move',side,uid:c.uid,from:{r:u.r,c:u.c},to:{r:moves[0].r,c:moves[0].c},target:null};}}
+    return null;
+  },
+  threatened(u,foe){for(const e of Units.ofOwner(foe)){const{attacks}=Movement.compute(e,5);if(attacks.some(a=>a.target===u.id))return true;}return false;}
+};
+
+/* ---------- TUTORIAL ---------- */
+/* ---------- INTERACTIVE TUTORIAL GUIDE ----------
+   Runs ON TOP of a live tutorial match (Game.tutorialMode=true). Spotlights one
+   element at a time, gives a short instruction, and waits for the player to
+   perform the real action (tap the card / unit / tile) before advancing.
+   It NEVER blocks an action — taps always go through to the normal game handlers
+   so the guide can't soft-lock the player; it just observes and advances. */
+const Tutorial={
+  active:false, step:0,
+  /* Every action step names the EXACT element required (forceCardUid / forceUnitPos /
+     forceTilePos). The game's input handlers (onCardTap/onTileTap) consult
+     Tutorial.allow() before doing ANYTHING — any other tap is rejected outright.
+     wait:'ai'      = Next press triggers the (stationary) opponent's turn
+     wait:'resolve' = no Next needed; auto-continues once control returns to the player */
+  steps:[
+    {title:'Welcome to MoveBound!', text:"Let's play a short guided match. I'll show you exactly what to tap — nothing else will respond until you do."},
+    {target:()=>document.getElementById('hand'), title:'Your Hand', text:'These are your cards. You play exactly one each turn.'},
+    {target:()=>document.getElementById('discardPile'), title:'The Match Pile', text:'You may only play a card that shares this pile\'s colour or number.'},
+    {target:()=>Tutorial.cardEl('tut_m2'), title:'Play a Move Card', text:'Tap the glowing "Move 2" card — its colour matches the pile.', awaiting:'card', forceCardUid:'tut_m2'},
+    {target:()=>Tutorial.tileEl(8,3), title:'Select Your Soldier', text:'Tap your glowing Soldier to select it.', awaiting:'unit', forceUnitPos:{r:8,c:3}},
+    {target:()=>Tutorial.tileEl(6,3), title:'Move Forward', text:'Tap the glowing tile — your Soldier moves 2 squares forward.', awaiting:'tile', forceTilePos:{r:6,c:3}},
+    {title:'Turn Complete!', text:'Each turn ends automatically once you move. Press Next to see the opponent\'s turn.', wait:'ai', nextLabel:'Watch Opponent ›'},
+    {title:"Opponent's Turn", text:'The opponent has no response this turn, so play returns straight to you.', wait:'resolve'},
+    {target:()=>Tutorial.cardEl('tut_skip'), title:'Power Cards', text:'Tap the glowing Skip card. Power cards act on their own — no piece needed.', awaiting:'card', forceCardUid:'tut_skip'},
+    {title:'Nice!', text:'Skip just made the opponent miss their entire next turn! Press Next to continue.', wait:'resolve'},
+    {target:()=>Tutorial.cardEl('tut_m4'), title:'The Finishing Move', text:'Tap the glowing "Move 4" card to bring out your Guardian.', awaiting:'card', forceCardUid:'tut_m4'},
+    {target:()=>Tutorial.tileEl(5,2), title:'Select Your Guardian', text:'Your Guardian glides any distance, in any of 8 directions. Tap it.', awaiting:'unit', forceUnitPos:{r:5,c:2}},
+    {target:()=>Tutorial.tileEl(1,2), title:'Capture the Commander!', text:'Tap the enemy Commander — your Guardian captures it and you WIN!', awaiting:'tile', forceTilePos:{r:1,c:2}},
+  ],
+  cardEl(uid){return document.querySelector(`.card[data-uid="${uid}"]`);},
+  tileEl(r,c){return UI.boardEl?UI.tile(r,c):null;},
+  beginGuide(){
+    this.active=true;this.step=0;
+    document.getElementById('quitBtn').style.display='none'; // avoid accidental exits mid-guide
+    document.getElementById('drawStack').classList.add('tut-inert');
+    this.renderStep();
+  },
+  current(){return this.steps[this.step];},
+  /* Authoritative gate consulted by Game.onCardTap / Game.onTileTap. Returns true ONLY
+     for the exact prescribed action of the current step — every other tap is rejected. */
+  allow(kind,payload){
+    if(!this.active)return true; // tutorial not running — never gate normal play
+    const s=this.current();
+    if(!s||s.awaiting!==kind)return false; // nothing of this kind is expected right now
+    if(kind==='card')return payload.uid===s.forceCardUid;
+    if(kind==='unit')return payload.r===s.forceUnitPos.r&&payload.c===s.forceUnitPos.c;
+    if(kind==='tile')return payload.r===s.forceTilePos.r&&payload.c===s.forceTilePos.c;
+    return false;
+  },
+  nudge(){
+    Audio.nope&&Audio.nope();
+    const hole=document.getElementById('tutHole');
+    if(hole){hole.classList.remove('tut-shake');void hole.offsetWidth;hole.classList.add('tut-shake');}
+    const box=document.getElementById('tutBubble');
+    if(box){box.classList.remove('tb-shake');void box.offsetWidth;box.classList.add('tb-shake');}
+  },
+  renderStep(){
+    const s=this.current();
+    if(!s){this.endGuide();return;}
+    UI.renderHand(Game.active); // keep card dim/highlight state in sync with the current step
+    this.buildBubble(s);
+    if(s.target){const el=s.target();if(el){this.spotlight(el);}else{this.clearSpotlight();}}
+    else this.clearSpotlight();
+  },
+  buildBubble(s){
+    let box=document.getElementById('tutBubble');
+    if(!box){box=document.createElement('div');box.id='tutBubble';box.className='tut-bubble';document.getElementById('app').appendChild(box);}
+    const label=s.nextLabel||'Next ›';
+    box.innerHTML=`<div class="tb-title">${s.title}</div><div class="tb-text">${s.text}</div>
+      <div class="tb-row">
+        ${s.awaiting?'<div class="tb-waiting">⟶ waiting for you…</div>':`<button class="tb-next" id="tbNext">${label}</button>`}
+        <div class="tb-spacer"></div>
+        <button class="tb-skip" id="tbSkip">Skip Tutorial</button>
+      </div>`;
+    document.getElementById('tbSkip').onclick=()=>{this.endGuide();Game.quitToMenu();};
+    if(!s.awaiting){
+      document.getElementById('tbNext').onclick=()=>{
+        if(s.wait==='ai'){ // Next explicitly triggers the opponent's (stationary) turn
+          Game.tutorialPassOpponent();
+          this._waitForHuman(()=>this.advance());
+        } else this.advance();
+      };
+    }
+    if(s.wait==='resolve'){ // no Next needed — auto-continue once control returns to the player
+      this._waitForHuman(()=>this.advance());
+    }
+  },
+  _waitForHuman(cb){
+    if(this._poll)clearInterval(this._poll);
+    this._poll=setInterval(()=>{
+      if(Game.isHumanTurn()&&!Game.busy){clearInterval(this._poll);this._poll=null;cb();}
+    },200);
+  },
+  spotlight(el){
+    let hole=document.getElementById('tutHole');
+    if(!hole){hole=document.createElement('div');hole.id='tutHole';hole.className='tut-hole';document.getElementById('app').appendChild(hole);}
+    const pad=6;
+    const place=()=>{
+      const r=el.getBoundingClientRect();const appR=document.getElementById('app').getBoundingClientRect();
+      hole.style.left=(r.left-appR.left-pad)+'px';hole.style.top=(r.top-appR.top-pad)+'px';
+      hole.style.width=(r.width+pad*2)+'px';hole.style.height=(r.height+pad*2)+'px';
+    };
+    place();hole.style.display='block';
+    if(this._track)cancelAnimationFrame(this._track);
+    const sync=()=>{
+      if(!this.active||!document.body.contains(el)){return;}
+      place();this._track=requestAnimationFrame(sync);
+    };
+    this._track=requestAnimationFrame(sync);
+  },
+  clearSpotlight(){const hole=document.getElementById('tutHole');if(hole)hole.style.display='none';if(this._track)cancelAnimationFrame(this._track);},
+  advance(){this.step++;this.renderStep();},
+  /* Called by the game's input handlers AFTER an allowed action has been processed. */
+  notify(kind){
+    if(!this.active)return;
+    const s=this.current();
+    if(s&&s.awaiting===kind){this.advance();}
+  },
+  endGuide(){
+    this.active=false;
+    if(this._poll){clearInterval(this._poll);this._poll=null;}
+    if(this._track)cancelAnimationFrame(this._track);
+    this.clearSpotlight();
+    const box=document.getElementById('tutBubble');if(box)box.remove();
+    document.getElementById('drawStack').classList.remove('tut-inert');
+    document.getElementById('quitBtn').style.display='flex';
+  },
+  showWinBanner(){
+    const ov=document.createElement('div');ov.className='tut-win-banner';
+    ov.innerHTML=`<div class="twb-emoji">🎉</div><div class="twb-text">You completed the Tutorial!</div><div class="twb-sub">You now know the basics of MoveBound.</div>`;
+    document.getElementById('app').appendChild(ov);
+    setTimeout(()=>ov.remove(),2400);
+  },
+  // Launches the guided match directly as Cyan vs a stationary opponent.
+  startMatch(){
+    Audio.init&&Audio.init();Audio.card&&Audio.card();
+    document.getElementById('menuMain').style.display='none';
+    document.getElementById('menuRoom').style.display='none';
+    Game.start({mode:'ai', mySide:'cyan', aiSide:'amber', tutorial:true});
+  },
+};
+
+const HowTo={
+  // mini 5x5 board showing a piece (center) and its reachable squares
+  miniBoard(type){
+    const N=5, ctr=2; const reach=[];
+    const mark=(r,c,kind)=>{if(r>=0&&r<N&&c>=0&&c<N)reach.push({r,c,kind});};
+    if(type==='commander'){for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++)if(dr||dc)mark(ctr+dr,ctr+dc,'move');}
+    else if(type==='guardian'){for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]])for(let s=1;s<N;s++)mark(ctr+dr*s,ctr+dc*s,'move');}
+    else if(type==='cannon'){for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]])for(let s=1;s<N;s++)mark(ctr+dr*s,ctr+dc*s,'move');}
+    else if(type==='phantom'){for(const [dr,dc] of [[-1,-1],[-1,1],[1,-1],[1,1]])for(let s=1;s<N;s++)mark(ctr+dr*s,ctr+dc*s,'move');}
+    else if(type==='raider'){for(const [dr,dc] of [[-2,-1],[-2,1],[2,-1],[2,1],[-1,-2],[-1,2],[1,-2],[1,2]])mark(ctr+dr,ctr+dc,'move');}
+    else if(type==='soldier'){mark(ctr-1,ctr,'move');mark(ctr-2,ctr,'move');mark(ctr-1,ctr-1,'cap');mark(ctr-1,ctr+1,'cap');}
+    let cells='';
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      const m=reach.find(x=>x.r===r&&x.c===c);const isCtr=(r===ctr&&c===ctr);
+      cells+=`<div class="mb-cell ${isCtr?'ctr':''} ${m?('mb-'+m.kind):''}">${isCtr?GLYPHS[UNIT_DEFS[type].glyph]:''}</div>`;
+    }
+    return `<div class="mini-board">${cells}</div>`;
+  },
+  pieceDesc:{
+    commander:'Moves one square in any direction — like a chess king. Capture it to win. Protect yours at all costs.',
+    guardian:'Glides any number of squares in any of the 8 directions. Your most powerful piece.',
+    cannon:'Fires in straight lines — any distance horizontally or vertically.',
+    raider:'Leaps in an L-shape (like a knight), jumping over anything in the way.',
+    phantom:'Slips diagonally any distance. Great for surprise angles.',
+    soldier:'Advances straight forward, and captures only on the forward diagonals — like a chess pawn.',
+  },
+  open(){
+    const s=document.getElementById('tutScroll');
+    let html=`<div class="tut-intro">Draw a card, play one that matches the <b>MATCH</b> pile by <b>colour</b> or <b>type</b>, then act. A move card lets a piece move; power cards work on their own. Take the enemy <b>Commander</b> to win.</div>`;
+    html+=`<div class="tut-section">THE PIECES — how they move</div>`;
+    ['commander','guardian','cannon','raider','phantom','soldier'].forEach(t=>{
+      html+=`<div class="tut-piece"><div class="tp-left">${this.miniBoard(t)}</div>
+        <div class="tp-right"><div class="tp-name">${UNIT_DEFS[t].name}</div><div class="tp-desc">${this.pieceDesc[t]}</div></div></div>`;
+    });
+    html+=`<div class="tut-legend"><span class="ll mb-move"></span> move &nbsp; <span class="ll mb-cap"></span> capture-only (Soldier)</div>`;
+    html+=`<div class="tut-section">THE CARDS</div>`;
+    const cardOrder=['m1','m2','m3','m4','m5','skip','swap','recall','officer','wild'];
+    cardOrder.forEach(id=>{const d=CARD_DEFS[id];
+      html+=`<div class="tut-card"><div class="tc-ico ${d.cat}">${d.icon}</div>
+        <div class="tc-body"><div class="tc-name">${d.name}</div><div class="tc-desc">${d.desc}</div></div></div>`;
+    });
+    html+=`<div class="tut-section">MATCHING (UNO-style)</div>
+      <div class="tut-intro">You may only play a card that shares the <b>colour</b> or the <b>type/number</b> of the card on the MATCH pile. A <b>Wild Color</b> card can be played anytime — you choose the new colour, then your turn ends. No match and no Wild? Draw from the stack — if it still doesn't match, your turn passes. (If both players are ever fully stuck, the colour auto-changes.)</div>`;
+    html+=`<div class="tut-section">CLOCKS</div>
+      <div class="tut-intro">Each turn has an <b>11-second</b> ring around the board. The whole match shares one <b>10-minute</b> game clock up top — if it runs out, the side with more pieces wins (equal = draw).</div>`;
+    s.innerHTML=html;
+    document.getElementById('menuMain').style.display='none';
+    document.getElementById('menuTutorial').style.display='flex';
+  },
+  close(){document.getElementById('menuTutorial').style.display='none';document.getElementById('menuMain').style.display='flex';}
+};
+
+/* ---------- BOOTSTRAP ---------- */
+document.getElementById('btnLocal').onclick=()=>{Audio.init();Audio.card();Room.open('local');};
+document.getElementById('btnAI').onclick=()=>{Audio.init();Audio.card();Room.open('ai');};
+document.getElementById('btnTutorial').onclick=()=>{Audio.init&&Audio.init();HowTo.open();};
+document.getElementById('tutClose').onclick=()=>HowTo.close();
+document.getElementById('btnGuide').onclick=()=>Tutorial.startMatch();
+document.getElementById('btnCredits').onclick=()=>{document.getElementById('menuMain').style.display='none';document.getElementById('menuCredits').style.display='flex';};
+document.getElementById('creditsClose').onclick=()=>{document.getElementById('menuCredits').style.display='none';document.getElementById('menuMain').style.display='flex';};
+document.getElementById('sideCyan').onclick=()=>Room.pick('cyan');
+document.getElementById('sideAmber').onclick=()=>Room.pick('amber');
+document.getElementById('roomBack').onclick=()=>Room.back();
+document.getElementById('drawStack').onclick=()=>Game.onDraw();
+document.getElementById('quitBtn').onclick=()=>{if(Game.over)return;Timer.stop();document.getElementById('quitConfirm').style.display='flex';};
+document.getElementById('quitNo').onclick=()=>{document.getElementById('quitConfirm').style.display='none';if(!Game.over&&Game.isHumanTurn())Timer.start(Game.active);};
+document.getElementById('quitYes').onclick=()=>{Game.quitToMenu();};
+
+/* First-launch: offer the guided tutorial automatically, once per browser. */
+(function firstLaunchCheck(){
+  let seen=true;
+  try{ seen = localStorage.getItem('movebound_seen_v1')==='1'; }catch(e){ seen=true; } // if storage blocked, don't nag
+  if(!seen){
+    document.getElementById('menuMain').style.display='none';
+    document.getElementById('firstLaunch').style.display='flex';
+  }
+  const mark=()=>{ try{ localStorage.setItem('movebound_seen_v1','1'); }catch(e){} };
+  document.getElementById('flYes').onclick=()=>{mark();document.getElementById('firstLaunch').style.display='none';Tutorial.startMatch();};
+  document.getElementById('flNo').onclick=()=>{mark();document.getElementById('firstLaunch').style.display='none';document.getElementById('menuMain').style.display='flex';};
+})();
+</script>
+</body>
+</html>
